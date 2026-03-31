@@ -3,8 +3,9 @@ import subprocess
 from contextlib import asynccontextmanager
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 from app.api.router import router as api_router
@@ -15,9 +16,15 @@ from app.utils.logging import configure_logging, get_logger
 configure_logging()
 logger = get_logger(__name__)
 
-security = HTTPBasic()
+security = HTTPBasic(auto_error=False)
 
-def _verify_credentials(credentials: Annotated[HTTPBasicCredentials, Depends(security)]) -> str:
+def _verify_credentials(credentials: Annotated[HTTPBasicCredentials | None, Depends(security)]) -> str:
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Basic"},
+        )
     for user in settings.ALLOWED_USERS:
         correct_username = secrets.compare_digest(credentials.username, user["username"])
         correct_password = secrets.compare_digest(credentials.password, user["password"])
@@ -28,7 +35,6 @@ def _verify_credentials(credentials: Annotated[HTTPBasicCredentials, Depends(sec
         detail="Invalid credentials",
         headers={"WWW-Authenticate": "Basic"},
     )
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -49,7 +55,6 @@ async def lifespan(app: FastAPI):
     stop_scheduler()
     logger.info("Shutting down")
 
-
 app = FastAPI(
     title="LoL Predictor API",
     version="0.1.0",
@@ -57,6 +62,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# CORS must be registered BEFORE auth so preflight OPTIONS requests pass through
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -64,7 +70,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 @app.get("/health", tags=["health"])
 async def health_check():
@@ -81,7 +86,6 @@ async def health_check():
         db_status = f"error: {exc}"
 
     return {"status": "ok", "db": db_status, "version": "0.1.0"}
-
 
 AuthDep = Annotated[str, Depends(_verify_credentials)]
 
