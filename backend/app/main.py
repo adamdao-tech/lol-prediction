@@ -17,8 +17,7 @@ logger = get_logger(__name__)
 
 security = HTTPBasic()
 
-
-def _verify_credentials(credentials: HTTPBasicCredentials) -> str:
+def _verify_credentials(credentials: Annotated[HTTPBasicCredentials, Depends(security)]) -> str:
     for user in settings.ALLOWED_USERS:
         correct_username = secrets.compare_digest(credentials.username, user["username"])
         correct_password = secrets.compare_digest(credentials.password, user["password"])
