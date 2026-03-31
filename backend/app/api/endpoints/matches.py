@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.models import Match, OddsSnapshot, Prediction
 from app.models.match import MatchStatus
+from app.models.tournament import Tournament
 from app.schemas.match import MatchListItem, MatchDetail
 
 router = APIRouter()
@@ -29,8 +30,8 @@ async def get_upcoming_matches(
         .options(
             selectinload(Match.team1),
             selectinload(Match.team2),
-            selectinload(Match.tournament).selectinload("league"),
-            selectinload(Match.predictions).selectinload("model_version"),
+            selectinload(Match.tournament).selectinload(Tournament.league),
+            selectinload(Match.predictions),
             selectinload(Match.odds_snapshots),
         )
         .where(Match.status.in_([MatchStatus.scheduled, MatchStatus.running]))
@@ -70,7 +71,7 @@ async def get_finished_matches(
         .options(
             selectinload(Match.team1),
             selectinload(Match.team2),
-            selectinload(Match.tournament).selectinload("league"),
+            selectinload(Match.tournament).selectinload(Tournament.league),
             selectinload(Match.predictions),
             selectinload(Match.odds_snapshots),
         )
@@ -100,9 +101,9 @@ async def get_match(match_id: int, db: Annotated[AsyncSession, Depends(get_db)])
             selectinload(Match.team1),
             selectinload(Match.team2),
             selectinload(Match.winner),
-            selectinload(Match.tournament).selectinload("league"),
+            selectinload(Match.tournament).selectinload(Tournament.league),
             selectinload(Match.games),
-            selectinload(Match.predictions).selectinload("model_version"),
+            selectinload(Match.predictions),
             selectinload(Match.odds_snapshots),
         )
         .where(Match.id == match_id)
@@ -124,33 +125,40 @@ def _build_match_list_item(m: Match) -> dict:
         latest_odds = sorted(m.odds_snapshots, key=lambda o: o.snapshot_at, reverse=True)[0]
 
     tournament = None
-    if m.tournament:
-        league = None
-        if hasattr(m.tournament, "league") and m.tournament.league:
-            league = m.tournament.league
+    if m.tournament is not None:
+        t = m.tournament
+        league_data = None
+        # Access only attributes loaded by selectinload — no lazy loading
+        league = t.__dict__.get("league")
+        if league is not None:
+            league_data = {
+                "id": league.id,
+                "name": league.name,
+                "region": league.region,
+            }
         tournament = {
-            "id": m.tournament.id,
-            "name": m.tournament.name,
-            "slug": m.tournament.slug,
-            "league": {"id": league.id, "name": league.name, "region": league.region} if league else None,
+            "id": t.id,
+            "name": t.name,
+            "slug": t.slug,
+            "league": league_data,
         }
 
     return {
         "id": m.id,
         "pandascore_id": m.pandascore_id,
-        "team1": m.team1,
-        "team2": m.team2,
+        "team1": m.__dict__.get("team1"),
+        "team2": m.__dict__.get("team2"),
         "scheduled_at": m.scheduled_at,
         "status": m.status.value if m.status else "scheduled",
         "number_of_games": m.number_of_games,
         "tournament": tournament,
         "latest_prediction": latest_pred,
         "latest_odds": latest_odds,
-        "patch_version": getattr(m, "patch_version", None),
+        "patch_version": m.patch_version,
         "winner_id": m.winner_id,
         "created_at": m.created_at,
         "updated_at": m.updated_at,
-        "games": getattr(m, "games", []),
-        "predictions": getattr(m, "predictions", []),
-        "odds_snapshots": getattr(m, "odds_snapshots", []),
+        "games": m.__dict__.get("games", []),
+        "predictions": m.__dict__.get("predictions", []),
+        "odds_snapshots": m.__dict__.get("odds_snapshots", []),
     }
