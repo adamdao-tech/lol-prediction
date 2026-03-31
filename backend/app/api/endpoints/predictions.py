@@ -79,14 +79,9 @@ async def generate_prediction(match_id: int, db: Annotated[AsyncSession, Depends
     team1: Team | None = match.team1
     team2: Team | None = match.team2
 
-    fallback = {
-        "win_prob_team1": 0.5, "win_prob_team2": 0.5,
-        "predicted_total_kills": 30.0, "predicted_duration_seconds": 1800,
-        "confidence_score": 0.0,
-        "features_snapshot": {"note": "fallback 50/50"},
-    }
-
-    pred_result = fallback
+    pred_data = {"win_prob_team1": 0.5, "win_prob_team2": 0.5,
+                 "predicted_total_kills": 30.0, "predicted_duration_seconds": 1800,
+                 "confidence_score": 0.0}
     draft_adjusted = False
 
     if team1 and team2 and team1.pandascore_id and team2.pandascore_id:
@@ -94,27 +89,33 @@ async def generate_prediction(match_id: int, db: Annotated[AsyncSession, Depends
             async with PandaScoreClient() as client:
                 matches1 = await client.get_team_past_matches(team1.pandascore_id, per_page=20)
                 matches2 = await client.get_team_past_matches(team2.pandascore_id, per_page=20)
-                h2h = await client.get_head_to_head_matches(team1.pandascore_id, team2.pandascore_id)
+                h2h_matches = await client.get_head_to_head_matches(team1.pandascore_id, team2.pandascore_id)
 
             blue_picks, red_picks, team1_is_blue = _extract_picks_from_raw(
                 match.raw_data, team1.pandascore_id
             )
 
-            pred_result = compute_full_prediction(
-                matches1=matches1,
-                matches2=matches2,
-                h2h_matches=h2h,
-                team1_id=team1.pandascore_id,
-                team2_id=team2.pandascore_id,
-                blue_picks=blue_picks if blue_picks else None,
-                red_picks=red_picks if red_picks else None,
-                team1_is_blue=team1_is_blue,
+            result = compute_full_prediction(
+                matches1,
+                matches2,
+                h2h_matches,
+                team1.pandascore_id,
+                team2.pandascore_id,
+                blue_picks if blue_picks else None,
+                red_picks if red_picks else None,
+                team1_is_blue,
             )
+            pred_data = result
+            features = result["features_snapshot"]
             draft_adjusted = bool(blue_picks)
         except Exception as e:
-            pred_result = fallback
-            pred_result["features_snapshot"] = {"error": str(e), "note": "fallback to 50/50"}
+            features = {"error": str(e), "note": "fallback to 50/50"}
+            draft_adjusted = False
+    else:
+        features = {"note": "missing team pandascore_id, fallback to 50/50"}
+        draft_adjusted = False
 
+    # Ensure model version exists
     mv_result = await db.execute(
         select(ModelVersion).where(ModelVersion.name == "multi-layer-v2").limit(1)
     )
@@ -123,10 +124,10 @@ async def generate_prediction(match_id: int, db: Annotated[AsyncSession, Depends
         model_version = ModelVersion(
             name="multi-layer-v2",
             version="2.0.0",
-            description="5-layer: weighted winrate + recent form + h2h + draft strength + tournament tier",
+            description="5-layer: weighted winrate + form + h2h + draft + tier",
             model_type=ModelType.combined,
             is_active=True,
-            metrics={"weights": {"weighted_winrate": 0.35, "recent_form": 0.20, "h2h": 0.15, "draft": 0.20, "tier": 0.10}},
+            metrics={"method": "multi_layer_v2"},
         )
         db.add(model_version)
         await db.flush()
@@ -134,13 +135,13 @@ async def generate_prediction(match_id: int, db: Annotated[AsyncSession, Depends
     prediction = Prediction(
         match_id=match_id,
         model_version_id=model_version.id,
-        win_prob_team1=pred_result["win_prob_team1"],
-        win_prob_team2=pred_result["win_prob_team2"],
-        predicted_total_kills=pred_result["predicted_total_kills"],
-        predicted_duration_seconds=pred_result["predicted_duration_seconds"],
-        confidence_score=pred_result["confidence_score"],
+        win_prob_team1=pred_data["win_prob_team1"],
+        win_prob_team2=pred_data["win_prob_team2"],
+        predicted_total_kills=pred_data["predicted_total_kills"],
+        predicted_duration_seconds=pred_data["predicted_duration_seconds"],
+        confidence_score=pred_data["confidence_score"],
         draft_adjusted=draft_adjusted,
-        features_snapshot=pred_result["features_snapshot"],
+        features_snapshot=features,
     )
     db.add(prediction)
     await db.flush()
