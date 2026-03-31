@@ -73,10 +73,16 @@ class PandaScoreClient:
     async def get_lol_past_matches(self, page: int = 1, per_page: int = 100) -> list[dict]:
         return await self._get("/lol/matches/past", params={"per_page": per_page, "page": page})
 
-    async def get_team_past_matches(self, pandascore_team_id: str, per_page: int = 10) -> list[dict]:
+    async def get_team_past_matches(self, pandascore_team_id: str, per_page: int = 20) -> list[dict]:
         return await self._get(
             "/lol/matches/past",
             params={"filter[opponent_id]": pandascore_team_id, "per_page": per_page, "sort": "-scheduled_at"},
+        )
+
+    async def get_head_to_head_matches(self, team1_id: str, team2_id: str, per_page: int = 20) -> list[dict]:
+        return await self._get(
+            "/lol/matches/past",
+            params={"filter[opponent_id]": f"{team1_id},{team2_id}", "per_page": per_page, "sort": "-scheduled_at"},
         )
 
     async def get_lol_match(self, match_id: str | int) -> dict:
