@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, useSearchParams, Link } from 'react-router-dom'
 import { matchesApi, predictionsApi, type MatchDetail } from '../api/client'
 import LoadingSpinner from '../components/LoadingSpinner'
+import LiveGamePanel from '../components/LiveGamePanel'
 
 function formatDate(dt: string | null): string {
   if (!dt) return '—'
@@ -23,6 +24,8 @@ function formatDuration(seconds: number | null): string {
 
 export default function MatchDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const [searchParams] = useSearchParams()
+  const gameId = searchParams.get('game_id')
   const [match, setMatch] = useState<MatchDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -115,6 +118,11 @@ export default function MatchDetailPage() {
           </span>
         </div>
       </div>
+
+      {/* Live game panel — shown when match is running or game_id query param is present */}
+      {(match.status === 'running' || gameId) && (
+        <LiveGamePanel gameId={gameId ?? String(id)} />
+      )}
 
       {/* Predictions section */}
       <div className="bg-white rounded-lg shadow border border-gray-200 p-6 mb-4">
