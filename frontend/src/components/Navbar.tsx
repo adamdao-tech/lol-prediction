@@ -1,0 +1,36 @@
+import { Link, useLocation } from 'react-router-dom'
+
+export default function Navbar() {
+  const location = useLocation()
+
+  const navLinks = [
+    { to: '/', label: 'Dashboard' },
+    { to: '/admin', label: 'Admin' },
+  ]
+
+  return (
+    <nav className="bg-gray-900 text-white shadow-lg">
+      <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-8">
+        <Link to="/" className="text-xl font-bold text-yellow-400 hover:text-yellow-300 transition-colors">
+          ⚔️ LoL Predictor
+        </Link>
+        <div className="flex gap-4">
+          {navLinks.map((link) => (
+            <Link
+              key={link.to}
+              to={link.to}
+              className={`text-sm font-medium transition-colors px-3 py-1 rounded ${
+                location.pathname === link.to
+                  ? 'bg-yellow-400 text-gray-900'
+                  : 'text-gray-300 hover:text-white hover:bg-gray-700'
+              }`}
+            >
+              {link.label}
+            </Link>
+          ))}
+        </div>
+        <div className="ml-auto text-xs text-gray-500">Internal use only</div>
+      </div>
+    </nav>
+  )
+}

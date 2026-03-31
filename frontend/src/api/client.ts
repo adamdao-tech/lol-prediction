@@ -1,0 +1,143 @@
+import axios from 'axios'
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
+const getCredentials = (): string => {
+  const username = localStorage.getItem('lol_username') || 'admin'
+  const password = localStorage.getItem('lol_password') || 'changeme'
+  return btoa(`${username}:${password}`)
+}
+
+const apiClient = axios.create({
+  baseURL: API_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+})
+
+apiClient.interceptors.request.use((config) => {
+  config.headers['Authorization'] = `Basic ${getCredentials()}`
+  return config
+})
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      console.warn('Unauthorized — check your credentials in localStorage')
+      alert('Authentication failed. Please set lol_username and lol_password in localStorage.')
+    }
+    return Promise.reject(error)
+  },
+)
+
+export interface Team {
+  id: number
+  pandascore_id: string
+  name: string
+  acronym: string | null
+  image_url: string | null
+  region: string | null
+}
+
+export interface League {
+  id: number
+  name: string
+  region: string | null
+}
+
+export interface Tournament {
+  id: number
+  name: string
+  slug: string | null
+  league: League | null
+}
+
+export interface Prediction {
+  id: number
+  win_prob_team1: number
+  win_prob_team2: number
+  predicted_total_kills: number | null
+  predicted_duration_seconds: number | null
+  confidence_score: number | null
+  draft_adjusted: boolean
+  created_at: string
+}
+
+export interface OddsSnapshot {
+  id: number
+  bookmaker: string
+  team1_odds: number
+  team2_odds: number
+  implied_prob_team1: number
+  implied_prob_team2: number
+  vig: number | null
+  snapshot_at: string
+}
+
+export interface Match {
+  id: number
+  pandascore_id: string
+  team1: Team | null
+  team2: Team | null
+  scheduled_at: string | null
+  status: string
+  number_of_games: number | null
+  tournament: Tournament | null
+  latest_prediction: Prediction | null
+  latest_odds: OddsSnapshot | null
+}
+
+export interface MatchDetail extends Match {
+  games: Game[]
+  predictions: Prediction[]
+  odds_snapshots: OddsSnapshot[]
+  patch_version: string | null
+  winner_id: number | null
+}
+
+export interface Game {
+  id: number
+  game_number: number
+  status: string
+  duration_seconds: number | null
+  total_kills: number | null
+  winner_id: number | null
+}
+
+export const matchesApi = {
+  getUpcoming: (params?: { league_id?: number; days_ahead?: number; with_odds_only?: boolean }) =>
+    apiClient.get<Match[]>('/api/matches/upcoming', { params }),
+
+  getFinished: (params?: { page?: number; per_page?: number; league_id?: number }) =>
+    apiClient.get<Match[]>('/api/matches/finished', { params }),
+
+  getById: (id: number) => apiClient.get<MatchDetail>(`/api/matches/${id}`),
+}
+
+export const teamsApi = {
+  list: (params?: { region?: string; search?: string }) =>
+    apiClient.get<Team[]>('/api/teams', { params }),
+  getById: (id: number) => apiClient.get<Team>(`/api/teams/${id}`),
+}
+
+export const leaguesApi = {
+  list: () => apiClient.get<League[]>('/api/leagues'),
+}
+
+export const predictionsApi = {
+  list: (params?: { match_id?: number; page?: number }) =>
+    apiClient.get<Prediction[]>('/api/predictions', { params }),
+  generate: (matchId: number) =>
+    apiClient.post<Prediction>(`/api/predictions/${matchId}/generate`),
+}
+
+export const adminApi = {
+  health: () => apiClient.get('/api/admin/health'),
+  ingestionLogs: () => apiClient.get('/api/admin/ingestion-logs'),
+  syncMatches: () => apiClient.post('/api/admin/sync/matches'),
+  syncLeagues: () => apiClient.post('/api/admin/sync/leagues'),
+  syncTeams: () => apiClient.post('/api/admin/sync/teams'),
+}
+
+export default apiClient
