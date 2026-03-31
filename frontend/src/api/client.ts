@@ -1,19 +1,18 @@
 import axios from 'axios'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+// V prohlížeči vždy používáme relativní URL - Vite proxy to přeposílá na backend
+const apiClient = axios.create({
+  baseURL: '',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+})
 
 const getCredentials = (): string => {
   const username = localStorage.getItem('lol_username') ?? ''
   const password = localStorage.getItem('lol_password') ?? ''
   return btoa(`${username}:${password}`)
 }
-
-const apiClient = axios.create({
-  baseURL: API_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-})
 
 apiClient.interceptors.request.use((config) => {
   config.headers['Authorization'] = `Basic ${getCredentials()}`
