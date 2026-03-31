@@ -33,6 +33,7 @@ function StatusBadge({ status }: { status: string }) {
 export default function MatchCard({ match }: Props) {
   const pred = match.latest_prediction
   const odds = match.latest_odds
+  const isLive = match.status === 'running'
 
   return (
     <div className="bg-white rounded-lg shadow border border-gray-200 p-4 hover:shadow-md transition-shadow">
@@ -40,7 +41,15 @@ export default function MatchCard({ match }: Props) {
         <span className="text-xs text-gray-500">
           {match.tournament?.league?.name ?? '—'} &bull; {match.tournament?.name ?? '—'}
         </span>
-        <StatusBadge status={match.status} />
+        <div className="flex items-center gap-1">
+          {isLive && (
+            <span className="flex items-center gap-0.5 text-xs font-semibold text-red-600">
+              <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+              LIVE
+            </span>
+          )}
+          <StatusBadge status={match.status} />
+        </div>
       </div>
 
       <div className="flex items-center justify-center gap-4 my-3">

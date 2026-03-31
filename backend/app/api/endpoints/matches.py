@@ -15,6 +15,32 @@ from app.schemas.match import MatchListItem, MatchDetail
 router = APIRouter()
 
 
+@router.get("/live", response_model=list[MatchListItem])
+async def get_live_matches(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    league_id: int | None = Query(None),
+):
+    stmt = (
+        select(Match)
+        .options(
+            selectinload(Match.team1),
+            selectinload(Match.team2),
+            selectinload(Match.tournament).selectinload(Tournament.league),
+            selectinload(Match.predictions),
+            selectinload(Match.odds_snapshots),
+        )
+        .where(Match.status == MatchStatus.running)
+        .order_by(Match.scheduled_at)
+    )
+    if league_id is not None:
+        stmt = stmt.join(Match.tournament).where(
+            Match.tournament.has(league_id=league_id)
+        )
+    result = await db.execute(stmt)
+    matches = result.scalars().all()
+    return [_build_match_list_item(m) for m in matches]
+
+
 @router.get("/upcoming", response_model=list[MatchListItem])
 async def get_upcoming_matches(
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -34,7 +60,7 @@ async def get_upcoming_matches(
             selectinload(Match.predictions),
             selectinload(Match.odds_snapshots),
         )
-        .where(Match.status.in_([MatchStatus.scheduled, MatchStatus.running]))
+        .where(Match.status == MatchStatus.scheduled)
         .where(Match.scheduled_at >= now)
         .where(Match.scheduled_at <= cutoff)
         .order_by(Match.scheduled_at)
