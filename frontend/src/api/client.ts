@@ -143,4 +143,41 @@ export const adminApi = {
   syncTeams: () => apiClient.post('/api/admin/sync/teams'),
 }
 
+export interface LiveSignals {
+  gold_diff: number
+  tower_diff: number
+  baron_diff: number
+  kill_diff: number
+  dragon_diff: number
+  inhibitor_diff: number
+}
+
+export interface LivePrediction {
+  game_id: string
+  win_prob_blue: number
+  win_prob_red: number
+  signals: LiveSignals
+  blue_dragons: string[]
+  red_dragons: string[]
+  blue_total_kills: number
+  red_total_kills: number
+  blue_total_gold: number
+  red_total_gold: number
+  game_state: string
+  frame_timestamp: string | null
+}
+
+export interface LiveWindow {
+  game_id: string
+  prediction: LivePrediction | null
+  raw_participants_blue: Record<string, unknown>[]
+  raw_participants_red: Record<string, unknown>[]
+  game_state: string
+}
+
+export const liveApi = {
+  getLivePrediction: (gameId: string) =>
+    apiClient.get<LiveWindow>(`/api/live/${gameId}`),
+}
+
 export default apiClient
