@@ -40,7 +40,7 @@ async def generate_prediction(match_id: int, db: Annotated[AsyncSession, Depends
 
     # Ensure a default model version exists
     mv_result = await db.execute(
-        select(ModelVersion).where(ModelVersion.is_active == True).limit(1)  # noqa: E712
+        select(ModelVersion).where(ModelVersion.is_active.is_(True)).limit(1)
     )
     model_version = mv_result.scalar_one_or_none()
     if model_version is None:

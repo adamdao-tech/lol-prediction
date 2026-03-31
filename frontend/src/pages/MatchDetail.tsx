@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { matchesApi, predictionsApi, type MatchDetail } from '../api/client'
 import LoadingSpinner from '../components/LoadingSpinner'
@@ -28,7 +28,7 @@ export default function MatchDetailPage() {
   const [error, setError] = useState<string | null>(null)
   const [generating, setGenerating] = useState(false)
 
-  const loadMatch = () => {
+  const loadMatch = useCallback(() => {
     if (!id) return
     setLoading(true)
     setError(null)
@@ -37,7 +37,7 @@ export default function MatchDetailPage() {
       .then((res) => setMatch(res.data))
       .catch((err) => setError(err?.message ?? 'Failed to load match'))
       .finally(() => setLoading(false))
-  }
+  }, [id])
 
   useEffect(() => {
     loadMatch()
