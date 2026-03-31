@@ -10,9 +10,38 @@ from app.models import Match, Prediction, ModelVersion, Team
 from app.models.model_version import ModelType
 from app.schemas.prediction import PredictionOut
 from app.ingestion.pandascore_client import PandaScoreClient
-from app.prediction.engine import _extract_team_stats, compute_prediction
+from app.prediction.engine import compute_full_prediction
 
 router = APIRouter()
+
+
+def _extract_picks_from_raw(raw_data: dict | None, team1_pandascore_id: str) -> tuple[list[str], list[str], bool]:
+    if not raw_data:
+        return [], [], True
+    blue_picks: list[str] = []
+    red_picks: list[str] = []
+    team1_is_blue = True
+    games = raw_data.get("games", [])
+    if not games:
+        return [], [], True
+    first_game = games[0]
+    for team_data in first_game.get("teams", []):
+        team_id = str((team_data.get("team") or {}).get("id", ""))
+        color = (team_data.get("color") or "").lower()
+        picks = [
+            (p.get("champion") or {}).get("name", "")
+            for p in team_data.get("picks", [])
+            if (p.get("champion") or {}).get("name")
+        ]
+        if color == "blue":
+            blue_picks = picks
+            if team_id == str(team1_pandascore_id):
+                team1_is_blue = True
+        elif color == "red":
+            red_picks = picks
+            if team_id == str(team1_pandascore_id):
+                team1_is_blue = False
+    return blue_picks, red_picks, team1_is_blue
 
 
 @router.get("", response_model=list[PredictionOut])
@@ -58,39 +87,47 @@ async def generate_prediction(match_id: int, db: Annotated[AsyncSession, Depends
     if team1 and team2 and team1.pandascore_id and team2.pandascore_id:
         try:
             async with PandaScoreClient() as client:
-                matches1 = await client.get_team_past_matches(team1.pandascore_id, per_page=10)
-                matches2 = await client.get_team_past_matches(team2.pandascore_id, per_page=10)
+                matches1 = await client.get_team_past_matches(team1.pandascore_id, per_page=20)
+                matches2 = await client.get_team_past_matches(team2.pandascore_id, per_page=20)
+                h2h_matches = await client.get_head_to_head_matches(team1.pandascore_id, team2.pandascore_id)
 
-            stats1 = _extract_team_stats(matches1, team1.pandascore_id)
-            stats2 = _extract_team_stats(matches2, team2.pandascore_id)
-            pred_data = compute_prediction(stats1, stats2)
+            blue_picks, red_picks, team1_is_blue = _extract_picks_from_raw(
+                match.raw_data, team1.pandascore_id
+            )
 
-            features = {
-                "team1_win_rate": stats1.win_rate,
-                "team2_win_rate": stats2.win_rate,
-                "team1_avg_kills": stats1.avg_kills,
-                "team2_avg_kills": stats2.avg_kills,
-                "team1_match_count": stats1.match_count,
-                "team2_match_count": stats2.match_count,
-            }
+            result = compute_full_prediction(
+                matches1,
+                matches2,
+                h2h_matches,
+                team1.pandascore_id,
+                team2.pandascore_id,
+                blue_picks if blue_picks else None,
+                red_picks if red_picks else None,
+                team1_is_blue,
+            )
+            pred_data = result
+            features = result["features_snapshot"]
+            draft_adjusted = bool(blue_picks)
         except Exception as e:
             features = {"error": str(e), "note": "fallback to 50/50"}
+            draft_adjusted = False
     else:
         features = {"note": "missing team pandascore_id, fallback to 50/50"}
+        draft_adjusted = False
 
     # Ensure model version exists
     mv_result = await db.execute(
-        select(ModelVersion).where(ModelVersion.is_active.is_(True)).limit(1)
+        select(ModelVersion).where(ModelVersion.name == "multi-layer-v2").limit(1)
     )
     model_version = mv_result.scalar_one_or_none()
     if model_version is None:
         model_version = ModelVersion(
-            name="pandascore-stats",
-            version="1.0.0",
-            description="Win rate based prediction from PandaScore historical data",
+            name="multi-layer-v2",
+            version="2.0.0",
+            description="5-layer: weighted winrate + form + h2h + draft + tier",
             model_type=ModelType.combined,
             is_active=True,
-            metrics={"method": "win_rate_ratio"},
+            metrics={"method": "multi_layer_v2"},
         )
         db.add(model_version)
         await db.flush()
@@ -103,7 +140,7 @@ async def generate_prediction(match_id: int, db: Annotated[AsyncSession, Depends
         predicted_total_kills=pred_data["predicted_total_kills"],
         predicted_duration_seconds=pred_data["predicted_duration_seconds"],
         confidence_score=pred_data["confidence_score"],
-        draft_adjusted=False,
+        draft_adjusted=draft_adjusted,
         features_snapshot=features,
     )
     db.add(prediction)
