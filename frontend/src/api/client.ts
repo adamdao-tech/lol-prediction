@@ -3,8 +3,8 @@ import axios from 'axios'
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 const getCredentials = (): string => {
-  const username = localStorage.getItem('lol_username') || 'admin'
-  const password = localStorage.getItem('lol_password') || 'changeme'
+  const username = localStorage.getItem('lol_username') ?? ''
+  const password = localStorage.getItem('lol_password') ?? ''
   return btoa(`${username}:${password}`)
 }
 
@@ -24,8 +24,9 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      console.warn('Unauthorized — check your credentials in localStorage')
-      alert('Authentication failed. Please set lol_username and lol_password in localStorage.')
+      localStorage.removeItem('lol_username')
+      localStorage.removeItem('lol_password')
+      window.location.href = '/login'
     }
     return Promise.reject(error)
   },

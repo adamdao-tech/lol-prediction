@@ -1,7 +1,9 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import type { ReactNode } from 'react'
 import Navbar from './components/Navbar'
 import Dashboard from './pages/Dashboard'
 import MatchDetail from './pages/MatchDetail'
+import Login from './pages/Login'
 
 function AdminStub() {
   return (
@@ -12,20 +14,39 @@ function AdminStub() {
   )
 }
 
+function ProtectedRoute({ children }: { children: ReactNode }) {
+  const username = localStorage.getItem('lol_username')
+  const password = localStorage.getItem('lol_password')
+  if (!username || !password) {
+    return <Navigate to="/login" replace />
+  }
+  return <>{children}</>
+}
+
 export default function App() {
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-gray-50">
-        <Navbar />
-        <main className="max-w-7xl mx-auto px-4 py-6">
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/matches/:id" element={<MatchDetail />} />
-            <Route path="/admin" element={<AdminStub />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </main>
-      </div>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route
+          path="/*"
+          element={
+            <ProtectedRoute>
+              <div className="min-h-screen bg-gray-50">
+                <Navbar />
+                <main className="max-w-7xl mx-auto px-4 py-6">
+                  <Routes>
+                    <Route path="/" element={<Dashboard />} />
+                    <Route path="/matches/:id" element={<MatchDetail />} />
+                    <Route path="/admin" element={<AdminStub />} />
+                    <Route path="*" element={<Navigate to="/" replace />} />
+                  </Routes>
+                </main>
+              </div>
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
     </BrowserRouter>
   )
 }

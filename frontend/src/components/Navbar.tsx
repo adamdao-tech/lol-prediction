@@ -1,12 +1,19 @@
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 export default function Navbar() {
   const location = useLocation()
+  const navigate = useNavigate()
 
   const navLinks = [
     { to: '/', label: 'Dashboard' },
     { to: '/admin', label: 'Admin' },
   ]
+
+  const handleLogout = () => {
+    localStorage.removeItem('lol_username')
+    localStorage.removeItem('lol_password')
+    navigate('/login')
+  }
 
   return (
     <nav className="bg-gray-900 text-white shadow-lg">
@@ -29,7 +36,12 @@ export default function Navbar() {
             </Link>
           ))}
         </div>
-        <div className="ml-auto text-xs text-gray-500">Internal use only</div>
+        <button
+          onClick={handleLogout}
+          className="ml-auto text-sm font-medium text-gray-300 hover:text-white hover:bg-gray-700 px-3 py-1 rounded transition-colors"
+        >
+          Odhlásit
+        </button>
       </div>
     </nav>
   )
