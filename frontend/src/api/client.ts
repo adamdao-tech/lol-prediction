@@ -43,7 +43,9 @@ export interface Team {
 export interface League {
   id: number
   name: string
+  slug: string | null
   region: string | null
+  image_url: string | null
 }
 
 export interface Tournament {
@@ -122,7 +124,8 @@ export const teamsApi = {
 }
 
 export const leaguesApi = {
-  list: () => apiClient.get<League[]>('/api/leagues'),
+  list: (params?: { region?: string; search?: string }) =>
+    apiClient.get<League[]>('/api/leagues', { params }),
 }
 
 export const predictionsApi = {
