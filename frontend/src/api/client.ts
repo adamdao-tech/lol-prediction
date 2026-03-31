@@ -108,6 +108,9 @@ export interface Game {
 }
 
 export const matchesApi = {
+  getLive: (params?: { league_id?: number }) =>
+    apiClient.get<Match[]>('/api/matches/live', { params }),
+
   getUpcoming: (params?: { league_id?: number; days_ahead?: number; with_odds_only?: boolean }) =>
     apiClient.get<Match[]>('/api/matches/upcoming', { params }),
 
