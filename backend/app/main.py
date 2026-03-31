@@ -3,9 +3,8 @@ import subprocess
 from contextlib import asynccontextmanager
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 from app.api.router import router as api_router
@@ -36,6 +35,7 @@ def _verify_credentials(credentials: Annotated[HTTPBasicCredentials | None, Depe
         headers={"WWW-Authenticate": "Basic"},
     )
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting up — running Alembic migrations")
@@ -62,7 +62,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS must be registered BEFORE auth so preflight OPTIONS requests pass through
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -70,6 +69,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 @app.get("/health", tags=["health"])
 async def health_check():
@@ -86,6 +86,7 @@ async def health_check():
         db_status = f"error: {exc}"
 
     return {"status": "ok", "db": db_status, "version": "0.1.0"}
+
 
 AuthDep = Annotated[str, Depends(_verify_credentials)]
 
