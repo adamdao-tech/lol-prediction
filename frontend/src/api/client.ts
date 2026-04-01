@@ -186,6 +186,7 @@ export interface LiveWindow {
   raw_participants_red: Record<string, unknown>[]
   game_state: string
   prob_history: number[]
+  game_timer_seconds: number
 }
 
 export const liveApi = {

@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://loluser:lolpass@db:5432/loldb"
     REDIS_URL: str = "redis://redis:6379/0"
     PANDASCORE_API_KEY: str = ""
+    THE_ODDS_API_KEY: str = ""
     SECRET_KEY: str = "change_this_to_a_random_secret"
     ALLOWED_USERS: list[dict[str, Any]] = [{"username": "admin", "password": "changeme"}]
     ENVIRONMENT: str = "dev"
