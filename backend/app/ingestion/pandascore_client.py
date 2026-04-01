@@ -61,6 +61,9 @@ class PandaScoreClient:
     async def get_lol_leagues(self) -> list[dict]:
         return await self._get("/lol/leagues", params={"per_page": 100})
 
+    async def get_lol_running_matches(self) -> list[dict]:
+        return await self._get("/lol/matches/running", params={"per_page": 100})
+
     async def get_lol_upcoming_matches(self, days_ahead: int = 7) -> list[dict]:
         now = datetime.now(timezone.utc)
         future = now + timedelta(days=days_ahead)

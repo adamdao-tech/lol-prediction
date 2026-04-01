@@ -67,12 +67,11 @@ export default function MatchDetailPage() {
   )
   if (!match) return null
 
-  // Resolve game_id: use URL param first, then auto-detect from running games
+  // Resolve game_id: use URL param first, then auto-detect from running/not-started games
   const resolvedGameId: string | null = gameIdParam ?? (() => {
     if (match.status !== 'running') return null
-    const runningGame = match.games.find((g) => g.status !== 'finished' && g.pandascore_id)
-    if (runningGame?.pandascore_id) return runningGame.pandascore_id
-    return null
+    const runningGame = match.games.find((g) => g.status !== 'finished' && g.lol_esports_game_id)
+    return runningGame?.lol_esports_game_id ?? null
   })()
 
   const latestPred = match.predictions.length > 0
@@ -127,9 +126,9 @@ export default function MatchDetailPage() {
         </div>
       </div>
 
-      {/* Live game panel — shown when match is running or game_id query param is present */}
-      {(match.status === 'running' || gameIdParam) && (
-        <LiveGamePanel gameId={resolvedGameId ?? String(id)} />
+      {/* Live game panel — shown when match is running (or game_id query param) and a valid game ID is available */}
+      {(match.status === 'running' || gameIdParam) && resolvedGameId && (
+        <LiveGamePanel gameId={resolvedGameId} />
       )}
 
       {/* Predictions section */}

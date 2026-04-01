@@ -16,6 +16,7 @@ class Game(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     pandascore_id: Mapped[str | None] = mapped_column(String(100), unique=True, nullable=True, index=True)
+    lol_esports_game_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     match_id: Mapped[int] = mapped_column(Integer, ForeignKey("matches.id"), nullable=False, index=True)
     game_number: Mapped[int] = mapped_column(Integer, nullable=False)
     team1_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("teams.id"), nullable=True)
