@@ -107,6 +107,7 @@ export interface Game {
   total_kills: number | null
   winner_id: number | null
   pandascore_id: string | null
+  lol_esports_game_id: string | null
 }
 
 export const matchesApi = {

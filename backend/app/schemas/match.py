@@ -49,6 +49,7 @@ class GameOut(BaseModel):
     team2_kills: int | None = None
     winner_id: int | None = None
     pandascore_id: str | None = None
+    lol_esports_game_id: str | None = None
 
 
 class MatchListItem(BaseModel):
