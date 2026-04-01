@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.models import Match, OddsSnapshot, Prediction
+from app.models.game import Game, GameStatus
 from app.models.match import MatchStatus
 from app.models.tournament import Tournament
 from app.schemas.match import MatchListItem, MatchDetail
@@ -28,6 +29,7 @@ async def get_live_matches(
             selectinload(Match.tournament).selectinload(Tournament.league),
             selectinload(Match.predictions),
             selectinload(Match.odds_snapshots),
+            selectinload(Match.games),
         )
         .where(Match.status == MatchStatus.running)
         .order_by(Match.scheduled_at)
@@ -169,6 +171,19 @@ def _build_match_list_item(m: Match) -> dict:
             "league": league_data,
         }
 
+    # Determine live_game_id: first non-finished game's pandascore_id when match is running
+    live_game_id: str | None = None
+    games: list = m.__dict__.get("games", [])
+    if games and m.status == MatchStatus.running:
+        running_game = next(
+            (g for g in games if g.status != GameStatus.finished and g.pandascore_id),
+            None,
+        )
+        if running_game:
+            live_game_id = running_game.pandascore_id
+        elif getattr(games[0], "pandascore_id", None):
+            live_game_id = games[0].pandascore_id
+
     return {
         "id": m.id,
         "pandascore_id": m.pandascore_id,
@@ -180,6 +195,7 @@ def _build_match_list_item(m: Match) -> dict:
         "tournament": tournament,
         "latest_prediction": latest_pred,
         "latest_odds": latest_odds,
+        "live_game_id": live_game_id,
         "patch_version": m.patch_version,
         "winner_id": m.winner_id,
         "created_at": m.created_at,

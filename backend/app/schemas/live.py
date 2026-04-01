@@ -23,6 +23,12 @@ class LivePredictionOut(BaseModel):
     red_total_gold: int
     game_state: str  # "in_game" | "finished" | "unknown"
     frame_timestamp: str | None = None
+    game_timer_seconds: int = 0
+    game_timer: str = "00:00"
+    blue_towers: int = 0
+    red_towers: int = 0
+    blue_barons: int = 0
+    red_barons: int = 0
 
 
 class LiveWindowOut(BaseModel):
@@ -31,3 +37,4 @@ class LiveWindowOut(BaseModel):
     raw_participants_blue: list[dict] = []
     raw_participants_red: list[dict] = []
     game_state: str
+    prob_history: list[float] = []

@@ -25,7 +25,7 @@ function formatDuration(seconds: number | null): string {
 export default function MatchDetailPage() {
   const { id } = useParams<{ id: string }>()
   const [searchParams] = useSearchParams()
-  const gameId = searchParams.get('game_id')
+  const gameIdParam = searchParams.get('game_id')
   const [match, setMatch] = useState<MatchDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -66,6 +66,14 @@ export default function MatchDetailPage() {
     </div>
   )
   if (!match) return null
+
+  // Resolve game_id: use URL param first, then auto-detect from running games
+  const resolvedGameId: string | null = gameIdParam ?? (() => {
+    if (match.status !== 'running') return null
+    const runningGame = match.games.find((g) => g.status !== 'finished' && g.pandascore_id)
+    if (runningGame?.pandascore_id) return runningGame.pandascore_id
+    return null
+  })()
 
   const latestPred = match.predictions.length > 0
     ? match.predictions.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
@@ -120,8 +128,8 @@ export default function MatchDetailPage() {
       </div>
 
       {/* Live game panel — shown when match is running or game_id query param is present */}
-      {(match.status === 'running' || gameId) && (
-        <LiveGamePanel gameId={gameId ?? String(id)} />
+      {(match.status === 'running' || gameIdParam) && (
+        <LiveGamePanel gameId={resolvedGameId ?? String(id)} />
       )}
 
       {/* Predictions section */}

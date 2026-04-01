@@ -40,6 +40,43 @@ function DiffStat({ label, blueSide, redSide }: { label: string; blueSide: numbe
   )
 }
 
+function Sparkline({ history }: { history: number[] }) {
+  if (history.length < 3) return null
+
+  const width = 300
+  const height = 40
+  const min = Math.min(...history)
+  const max = Math.max(...history)
+  const range = max - min || 0.01
+
+  const points = history.map((v, i) => {
+    const x = (i / (history.length - 1)) * width
+    const y = height - ((v - min) / range) * (height - 4) - 2
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  })
+
+  return (
+    <div className="mt-3">
+      <div className="text-xs text-gray-400 mb-1">Trend (last {history.length} frames)</div>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className="w-full"
+        style={{ height: '40px' }}
+        preserveAspectRatio="none"
+      >
+        <polyline
+          points={points.join(' ')}
+          fill="none"
+          stroke="#3b82f6"
+          strokeWidth="2"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+      </svg>
+    </div>
+  )
+}
+
 export default function LiveGamePanel({ gameId }: Props) {
   const [data, setData] = useState<LiveWindow | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -92,6 +129,9 @@ export default function LiveGamePanel({ gameId }: Props) {
         <div className="flex items-center gap-2">
           <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
           <h2 className="text-lg font-semibold">Live Game</h2>
+          {pred.game_timer && pred.game_timer !== '00:00' && (
+            <span className="text-sm text-gray-600 font-mono">⏱ {pred.game_timer}</span>
+          )}
           <span className="text-xs text-gray-400 font-normal ml-1">game id: {gameId}</span>
         </div>
         {lastUpdated && (
@@ -113,6 +153,7 @@ export default function LiveGamePanel({ gameId }: Props) {
             style={{ width: `${bluePct}%` }}
           />
         </div>
+        <Sparkline history={data.prob_history ?? []} />
       </div>
 
       {/* Stats grid */}
@@ -140,13 +181,13 @@ export default function LiveGamePanel({ gameId }: Props) {
 
         <DiffStat
           label="Towers"
-          blueSide={pred.signals.tower_diff >= 0 ? pred.signals.tower_diff : 0}
-          redSide={pred.signals.tower_diff < 0 ? -pred.signals.tower_diff : 0}
+          blueSide={pred.blue_towers}
+          redSide={pred.red_towers}
         />
         <DiffStat
           label="Barons"
-          blueSide={pred.signals.baron_diff >= 0 ? pred.signals.baron_diff : 0}
-          redSide={pred.signals.baron_diff < 0 ? -pred.signals.baron_diff : 0}
+          blueSide={pred.blue_barons}
+          redSide={pred.red_barons}
         />
         <DiffStat
           label="Dragons"

@@ -1,5 +1,6 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import type { Match } from '../api/client'
+import { liveApi, type Match } from '../api/client'
 
 interface Props {
   match: Match
@@ -35,8 +36,31 @@ export default function MatchCard({ match }: Props) {
   const odds = match.latest_odds
   const isLive = match.status === 'running'
 
+  const [liveProb, setLiveProb] = useState<{ blue: number; red: number } | null>(null)
+
+  useEffect(() => {
+    if (!isLive || !match.live_game_id) return
+
+    liveApi
+      .getLivePrediction(match.live_game_id)
+      .then((res) => {
+        const p = res.data.prediction
+        if (p) {
+          setLiveProb({ blue: p.win_prob_blue, red: p.win_prob_red })
+        }
+      })
+      .catch(() => {
+        // Silently fall back to pre-game prediction
+      })
+  }, [isLive, match.live_game_id])
+
+  const showBlueProb = liveProb ? Math.round(liveProb.blue * 100) : pred ? Math.round(pred.win_prob_team1 * 100) : null
+  const showRedProb = liveProb ? Math.round(liveProb.red * 100) : pred ? Math.round(pred.win_prob_team2 * 100) : null
+
   return (
-    <div className="bg-white rounded-lg shadow border border-gray-200 p-4 hover:shadow-md transition-shadow">
+    <div className={`bg-white rounded-lg shadow border p-4 hover:shadow-md transition-shadow ${
+      isLive ? 'border-green-400 ring-2 ring-green-300' : 'border-gray-200'
+    }`}>
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs text-gray-500">
           {match.tournament?.league?.name ?? '—'} &bull; {match.tournament?.name ?? '—'}
@@ -58,9 +82,9 @@ export default function MatchCard({ match }: Props) {
             <img src={match.team1.image_url} alt={match.team1.name} className="w-8 h-8 mx-auto mb-1 object-contain" />
           )}
           <div className="font-semibold text-gray-800">{match.team1?.acronym ?? match.team1?.name ?? 'TBD'}</div>
-          {pred && (
-            <div className="text-sm text-yellow-600 font-medium">
-              {(pred.win_prob_team1 * 100).toFixed(0)}%
+          {showBlueProb !== null && (
+            <div className={`text-sm font-medium ${liveProb ? 'text-blue-600' : 'text-yellow-600'}`}>
+              {showBlueProb}%
             </div>
           )}
         </div>
@@ -70,9 +94,9 @@ export default function MatchCard({ match }: Props) {
             <img src={match.team2.image_url} alt={match.team2.name} className="w-8 h-8 mx-auto mb-1 object-contain" />
           )}
           <div className="font-semibold text-gray-800">{match.team2?.acronym ?? match.team2?.name ?? 'TBD'}</div>
-          {pred && (
-            <div className="text-sm text-yellow-600 font-medium">
-              {(pred.win_prob_team2 * 100).toFixed(0)}%
+          {showRedProb !== null && (
+            <div className={`text-sm font-medium ${liveProb ? 'text-red-500' : 'text-yellow-600'}`}>
+              {showRedProb}%
             </div>
           )}
         </div>
@@ -85,6 +109,18 @@ export default function MatchCard({ match }: Props) {
       {odds && (
         <div className="text-xs text-gray-500 text-center mb-2">
           Odds: {odds.team1_odds} / {odds.team2_odds} ({odds.bookmaker})
+        </div>
+      )}
+
+      {/* Live win probability mini bar */}
+      {isLive && liveProb && (
+        <div className="mb-2">
+          <div className="h-2 rounded-full overflow-hidden flex bg-red-400">
+            <div
+              className="bg-blue-500 transition-all duration-700"
+              style={{ width: `${Math.round(liveProb.blue * 100)}%` }}
+            />
+          </div>
         </div>
       )}
 
