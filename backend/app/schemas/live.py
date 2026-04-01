@@ -38,3 +38,4 @@ class LiveWindowOut(BaseModel):
     raw_participants_red: list[dict] = []
     game_state: str
     prob_history: list[float] = []
+    game_timer_seconds: int = 0

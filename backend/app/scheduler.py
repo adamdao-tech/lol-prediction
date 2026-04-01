@@ -4,6 +4,7 @@ from app.database import AsyncSessionLocal
 from app.ingestion.sync_matches import sync_upcoming_matches, sync_running_matches
 from app.ingestion.sync_leagues import sync_leagues
 from app.ingestion.sync_teams import sync_teams
+from app.ingestion.sync_odds import sync_lol_odds
 from app.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -58,6 +59,18 @@ async def _run_sync_teams() -> None:
             logger.error("scheduler: sync_teams error", error=str(exc))
 
 
+async def _run_sync_odds() -> None:
+    logger.info("scheduler: starting sync_lol_odds")
+    async with AsyncSessionLocal() as db:
+        try:
+            result = await sync_lol_odds(db)
+            await db.commit()
+            logger.info("scheduler: sync_lol_odds done", **result)
+        except Exception as exc:
+            await db.rollback()
+            logger.error("scheduler: sync_lol_odds error", error=str(exc))
+
+
 def start_scheduler() -> None:
     scheduler.add_job(
         _run_sync_matches,
@@ -81,6 +94,12 @@ def start_scheduler() -> None:
         _run_sync_teams,
         trigger=IntervalTrigger(hours=6),
         id="sync_teams",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        _run_sync_odds,
+        trigger=IntervalTrigger(minutes=60),
+        id="sync_lol_odds",
         replace_existing=True,
     )
     scheduler.start()

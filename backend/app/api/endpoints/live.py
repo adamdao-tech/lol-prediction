@@ -65,4 +65,5 @@ async def get_live_prediction(game_id: str):
         raw_participants_red=red_participants,
         game_state=game_state,
         prob_history=prob_history,
+        game_timer_seconds=prediction_data["game_timer_seconds"],
     )
