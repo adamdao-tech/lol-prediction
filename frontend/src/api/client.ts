@@ -88,6 +88,7 @@ export interface Match {
   tournament: Tournament | null
   latest_prediction: Prediction | null
   latest_odds: OddsSnapshot | null
+  live_game_id: string | null
 }
 
 export interface MatchDetail extends Match {
@@ -105,6 +106,7 @@ export interface Game {
   duration_seconds: number | null
   total_kills: number | null
   winner_id: number | null
+  pandascore_id: string | null
 }
 
 export const matchesApi = {
@@ -168,6 +170,12 @@ export interface LivePrediction {
   red_total_gold: number
   game_state: string
   frame_timestamp: string | null
+  game_timer_seconds: number
+  game_timer: string
+  blue_towers: number
+  red_towers: number
+  blue_barons: number
+  red_barons: number
 }
 
 export interface LiveWindow {
@@ -176,6 +184,7 @@ export interface LiveWindow {
   raw_participants_blue: Record<string, unknown>[]
   raw_participants_red: Record<string, unknown>[]
   game_state: string
+  prob_history: number[]
 }
 
 export const liveApi = {

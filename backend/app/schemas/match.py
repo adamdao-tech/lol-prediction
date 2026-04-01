@@ -48,6 +48,7 @@ class GameOut(BaseModel):
     team1_kills: int | None = None
     team2_kills: int | None = None
     winner_id: int | None = None
+    pandascore_id: str | None = None
 
 
 class MatchListItem(BaseModel):
@@ -63,6 +64,7 @@ class MatchListItem(BaseModel):
     tournament: TournamentInMatch | None = None
     latest_prediction: "PredictionOut | None" = None
     latest_odds: OddsSnapshotOut | None = None
+    live_game_id: str | None = None
 
 
 class MatchOut(MatchListItem):
