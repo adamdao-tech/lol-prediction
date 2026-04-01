@@ -4,6 +4,7 @@ import Navbar from './components/Navbar'
 import Dashboard from './pages/Dashboard'
 import MatchDetail from './pages/MatchDetail'
 import Login from './pages/Login'
+import ValueBets from './pages/ValueBets'
 
 function AdminStub() {
   return (
@@ -38,6 +39,7 @@ export default function App() {
                   <Routes>
                     <Route path="/" element={<Dashboard />} />
                     <Route path="/matches/:id" element={<MatchDetail />} />
+                    <Route path="/value-bets" element={<ValueBets />} />
                     <Route path="/admin" element={<AdminStub />} />
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>

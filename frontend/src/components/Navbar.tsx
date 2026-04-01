@@ -6,6 +6,7 @@ export default function Navbar() {
 
   const navLinks = [
     { to: '/', label: 'Dashboard' },
+    { to: '/value-bets', label: '💎 Tipáč' },
     { to: '/admin', label: 'Admin' },
   ]
 
