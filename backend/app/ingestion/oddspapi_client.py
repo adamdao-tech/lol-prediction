@@ -18,7 +18,7 @@ _OUTCOME_AWAY = "103"
 
 class OddsPapiClient:
     """
-    Async klient pro OddsPapi.io v4.
+    Async client for OddsPapi.io v4.
     Docs: https://api.oddspapi.io
     Auth: apiKey as query parameter on every request
     Flow:
@@ -158,8 +158,16 @@ class OddsPapiClient:
             if not fixture_id or not start_time:
                 continue
 
-            home_name = participant_names.get(p1_id, str(p1_id)) if p1_id is not None else ""
-            away_name = participant_names.get(p2_id, str(p2_id)) if p2_id is not None else ""
+            home_name = participant_names.get(p1_id, "") if p1_id is not None else ""
+            away_name = participant_names.get(p2_id, "") if p2_id is not None else ""
+
+            if not home_name or not away_name:
+                logger.warning(
+                    "oddspapi: participant name not found",
+                    participant1_id=p1_id,
+                    participant2_id=p2_id,
+                    fixture_id=fixture_id,
+                )
 
             # Parse bookmaker odds from v4 structure
             bookmakers_raw: dict = fixture.get("bookmakerOdds") or {}
@@ -184,6 +192,8 @@ class OddsPapiClient:
                     continue
 
                 try:
+                    # The v4 API wraps each outcome's price under "players"."0".
+                    # Key "0" represents the default (single) player/selection index.
                     home_price = float(
                         home_outcome["players"]["0"]["price"]
                     )
