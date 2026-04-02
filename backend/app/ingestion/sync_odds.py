@@ -2,6 +2,7 @@ from datetime import datetime, timezone, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.ingestion.oddspapi_client import OddsPapiClient
@@ -14,18 +15,15 @@ logger = get_logger(__name__)
 
 _MATCH_WINDOW_HOURS = 2
 
-
 def _normalize_team_name(name: str) -> str:
     """Lowercase and strip common suffixes for fuzzy matching."""
     return name.lower().strip()
-
 
 def _teams_match(api_name: str, db_name: str) -> bool:
     """Return True if team names are similar enough to be the same team."""
     a = _normalize_team_name(api_name)
     b = _normalize_team_name(db_name)
     return a == b or a in b or b in a
-
 
 async def sync_lol_odds(db: AsyncSession) -> dict:
     """
@@ -44,10 +42,8 @@ async def sync_lol_odds(db: AsyncSession) -> dict:
     now = datetime.now(timezone.utc)
 
     for event in events:
-        # OddsPapi uses "home"/"away" instead of "home_team"/"away_team"
         home_team = event.get("home", "")
         away_team = event.get("away", "")
-        # OddsPapi uses "date" instead of "commence_time"
         commence_time_raw = event.get("date")
 
         if not home_team or not away_team or not commence_time_raw:
@@ -67,7 +63,9 @@ async def sync_lol_odds(db: AsyncSession) -> dict:
         window_end = commence_time + timedelta(hours=_MATCH_WINDOW_HOURS)
 
         result = await db.execute(
-            select(Match).where(
+            select(Match)
+            .options(selectinload(Match.team1), selectinload(Match.team2))
+            .where(
                 Match.scheduled_at >= window_start,
                 Match.scheduled_at <= window_end,
                 Match.status.in_([MatchStatus.scheduled, MatchStatus.running]),
@@ -100,7 +98,6 @@ async def sync_lol_odds(db: AsyncSession) -> dict:
         # OddsPapi bookmakers is a dict: {bookmaker_name: [markets]}
         bookmakers_data = event.get("bookmakers", {})
         if isinstance(bookmakers_data, list):
-            # Fallback: handle list format just in case
             logger.warning(
                 "sync_lol_odds: unexpected list format for bookmakers, expected dict",
                 event_id=event.get("id"),
@@ -110,20 +107,16 @@ async def sync_lol_odds(db: AsyncSession) -> dict:
                 for bk in bookmakers_data
             ]
         else:
-            # Normal OddsPapi dict format: {bookmaker_name: [markets]}
             bookmaker_items = [
                 (name, markets) for name, markets in bookmakers_data.items()
             ]
 
         for bookmaker_name, markets in bookmaker_items:
             for market in markets:
-                # OddsPapi uses "ML" (Match Line) for H2H market
                 market_name = market.get("name", market.get("key", ""))
                 if market_name not in ("ML", "h2h"):
                     continue
 
-                # OddsPapi odds format: [{"home": "1.85", "away": "2.10"}]
-                # Fallback to "outcomes" list for compatibility
                 odds_list = market.get("odds", [])
                 outcomes = market.get("outcomes", [])
 
@@ -131,8 +124,7 @@ async def sync_lol_odds(db: AsyncSession) -> dict:
                 team2_odds: float = 0.0
 
                 if odds_list:
-                    # OddsPapi native format
-                    first_odds = odds_list[0] if odds_list else {}
+                    first_odds = odds_list[0] if odds_list else {} 
                     raw_home = first_odds.get("home", 0)
                     raw_away = first_odds.get("away", 0)
                     try:
@@ -142,7 +134,6 @@ async def sync_lol_odds(db: AsyncSession) -> dict:
                         continue
 
                     t1_name = match.team1.name if match.team1 else ""
-                    # Determine which side (home/away in API) maps to team1/team2 in DB
                     if _teams_match(home_team, t1_name):
                         team1_odds = home_odds_val
                         team2_odds = away_odds_val
@@ -151,7 +142,6 @@ async def sync_lol_odds(db: AsyncSession) -> dict:
                         team2_odds = home_odds_val
 
                 elif len(outcomes) >= 2:
-                    # Compatibility with The Odds API-style outcomes list
                     team1_odds_opt: float | None = None
                     team2_odds_opt: float | None = None
                     t1_name = match.team1.name if match.team1 else ""
