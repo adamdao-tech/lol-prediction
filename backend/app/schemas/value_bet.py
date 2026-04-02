@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class ValueBetDetail(BaseModel):
@@ -10,6 +10,8 @@ class ValueBetDetail(BaseModel):
 
 
 class ValueBetOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True, protected_namespaces=())
+
     match_id: int
     team1_name: str
     team2_name: str
@@ -20,5 +22,3 @@ class ValueBetOut(BaseModel):
     value_team1: ValueBetDetail | None = None
     value_team2: ValueBetDetail | None = None
     scheduled_at: str | None = None
-
-    model_config = {"from_attributes": True}

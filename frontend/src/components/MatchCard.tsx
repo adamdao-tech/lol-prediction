@@ -102,15 +102,15 @@ export default function MatchCard({ match }: Props) {
         </div>
       </div>
 
+      {odds && (
+        <div className="text-xs text-gray-500 text-center mb-2">
+          Odds: {odds.team1_odds.toFixed(2)} / {odds.team2_odds.toFixed(2)} ({odds.bookmaker})
+        </div>
+      )}
+
       <div className="text-center text-sm text-gray-500 mb-3">
         {formatDate(match.scheduled_at)} &bull; BO{match.number_of_games ?? '?'}
       </div>
-
-      {odds && (
-        <div className="text-xs text-gray-500 text-center mb-2">
-          Odds: {odds.team1_odds} / {odds.team2_odds} ({odds.bookmaker})
-        </div>
-      )}
 
       {/* Live win probability mini bar */}
       {isLive && liveProb && (
