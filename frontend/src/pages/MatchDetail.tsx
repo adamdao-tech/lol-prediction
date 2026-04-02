@@ -30,6 +30,7 @@ export default function MatchDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [generating, setGenerating] = useState(false)
+  const [fetchingOdds, setFetchingOdds] = useState(false)
 
   const loadMatch = useCallback(() => {
     if (!id) return
@@ -45,6 +46,19 @@ export default function MatchDetailPage() {
   useEffect(() => {
     loadMatch()
   }, [id])
+
+  const handleFetchOdds = async () => {
+    if (!id) return
+    setFetchingOdds(true)
+    try {
+      await matchesApi.syncOdds(Number(id))
+      loadMatch()
+    } catch (err: unknown) {
+      alert('Failed to fetch odds')
+    } finally {
+      setFetchingOdds(false)
+    }
+  }
 
   const handleGeneratePrediction = async () => {
     if (!id) return
@@ -180,7 +194,18 @@ export default function MatchDetailPage() {
 
       {/* Odds section */}
       <div className="bg-white rounded-lg shadow border border-gray-200 p-6 mb-4">
-        <h2 className="text-lg font-semibold mb-4">Odds</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold">Odds</h2>
+          {match.status === 'scheduled' && (
+            <button
+              onClick={handleFetchOdds}
+              disabled={fetchingOdds}
+              className="bg-yellow-400 hover:bg-yellow-300 text-gray-900 text-sm font-medium px-4 py-1.5 rounded disabled:opacity-50 transition-colors"
+            >
+              {fetchingOdds ? 'Fetching...' : 'Fetch Odds'}
+            </button>
+          )}
+        </div>
         {match.odds_snapshots.length > 0 ? (
           <table className="w-full text-sm">
             <thead>

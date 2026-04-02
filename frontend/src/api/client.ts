@@ -121,6 +121,7 @@ export const matchesApi = {
     apiClient.get<Match[]>('/api/matches/finished', { params }),
 
   getById: (id: number) => apiClient.get<MatchDetail>(`/api/matches/${id}`),
+  syncOdds: (id: number) => apiClient.post(`/api/matches/${id}/sync-odds`),
 }
 
 export const teamsApi = {
