@@ -1,12 +1,13 @@
 from datetime import datetime, timezone, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
+from app.ingestion.sync_odds import sync_lol_odds
 from app.models import Match, OddsSnapshot, Prediction
 from app.models.game import Game, GameStatus
 from app.models.match import MatchStatus
@@ -119,10 +120,21 @@ async def get_finished_matches(
     return [_build_match_list_item(m) for m in matches]
 
 
+@router.post("/{match_id}/sync-odds")
+async def sync_match_odds(match_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
+    """Trigger odds sync for a specific match."""
+    result_check = await db.execute(select(Match).where(Match.id == match_id))
+    match = result_check.scalar_one_or_none()
+    if match is None:
+        raise HTTPException(status_code=404, detail="Match not found")
+
+    result = await sync_lol_odds(db)
+    await db.flush()
+    return result
+
+
 @router.get("/{match_id}", response_model=MatchDetail)
 async def get_match(match_id: int, db: Annotated[AsyncSession, Depends(get_db)]):
-    from fastapi import HTTPException
-
     stmt = (
         select(Match)
         .options(
