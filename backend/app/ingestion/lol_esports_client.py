@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -35,8 +34,9 @@ class LoLEsportsClient:
     async def get_live_window(self, game_id: str) -> dict:
         assert self._client is not None, "Client not initialised — use async with"
         url = f"{LIVESTATS_BASE}/window/{game_id}"
+        params: dict = {}
         try:
-            response = await self._client.get(url)
+            response = await self._client.get(url, params=params)
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
             raise LiveDataNotAvailable(
@@ -51,8 +51,9 @@ class LoLEsportsClient:
     async def get_live_details(self, game_id: str) -> dict:
         assert self._client is not None, "Client not initialised — use async with"
         url = f"{LIVESTATS_BASE}/details/{game_id}"
+        params: dict = {}
         try:
-            response = await self._client.get(url)
+            response = await self._client.get(url, params=params)
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
             raise LiveDataNotAvailable(
