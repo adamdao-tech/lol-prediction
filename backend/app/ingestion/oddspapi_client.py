@@ -14,14 +14,15 @@ LOL_SPORT_ID = 18
 # LCS=2450, LEC=2452, LCK=2454, MSI=2527, Worlds=2549
 LOL_MAJOR_TOURNAMENT_IDS = [2450, 2452, 2454, 2527, 2549]
 
+
 class OddsPapiClient:
     """
     Async klient pro OddsPapi.io v4.
     Auth: apiKey as query parameter on every request.
     Flow:
-      1. GET /v4/participants?sportId=18 — build id→name mapping
-      2. GET /v4/odds-by-tournaments?tournamentIds=...  — get fixtures+odds (max 5 IDs)
-    Note: LoL esports uses market "181" (moneyline), outcomes "181"=home, "182"=away
+      1. GET /v4/participants?sportId=18 — build id->name mapping
+         Response format: {"240608": "kt Rolster", "240616": "T1", ...}
+      2. GET /v4/odds-by-tournaments?tournamentIds=... — get fixtures+odds (max 5 IDs)
     """
 
     def __init__(self) -> None:
@@ -39,7 +40,9 @@ class OddsPapiClient:
             await self._client.aclose()
 
     async def _fetch_participant_names(self, api_key: str) -> dict[int, str]:
-        """Fetch participantId -> name mapping for LoL."""
+        """Fetch participantId -> name mapping for LoL.
+        API returns a flat dict: {"<str_id>": "<team_name>", ...}
+        """
         assert self._client is not None
         try:
             resp = await self._client.get(
@@ -48,28 +51,32 @@ class OddsPapiClient:
             )
             resp.raise_for_status()
             data = resp.json()
-            # API returns either a list of dicts or a paginated object
-            if isinstance(data, list):
-                items = data
-            elif isinstance(data, dict):
-                # try common pagination keys
-                items = data.get("data") or data.get("participants") or data.get("items") or []
-            else:
-                items = []
 
             names: dict[int, str] = {}
-            for item in items:
-                if not isinstance(item, dict):
-                    continue
-                pid = item.get("participantId") or item.get("id")
-                pname = (
-                    item.get("participantName")
-                    or item.get("name")
-                    or item.get("teamName")
-                    or ""
-                )
-                if isinstance(pid, int) and pname:
-                    names[pid] = pname
+
+            if isinstance(data, dict):
+                # Flat format: {"240608": "kt Rolster", "240616": "T1", ...}
+                for str_id, name in data.items():
+                    if isinstance(name, str) and name:
+                        try:
+                            names[int(str_id)] = name
+                        except (ValueError, TypeError):
+                            pass
+            elif isinstance(data, list):
+                # Fallback: list of dicts format
+                for item in data:
+                    if not isinstance(item, dict):
+                        continue
+                    pid = item.get("participantId") or item.get("id")
+                    pname = (
+                        item.get("participantName")
+                        or item.get("name")
+                        or item.get("teamName")
+                        or ""
+                    )
+                    if isinstance(pid, int) and pname:
+                        names[pid] = pname
+
             logger.info("oddspapi: fetched participant names", count=len(names))
             return names
         except Exception as exc:
@@ -83,24 +90,24 @@ class OddsPapiClient:
         Returns a list of event dicts compatible with sync_odds.py:
           {
             "id": "<fixtureId>",
-            "home": "<team name or id>",
-            "away": "<team name or id>",
+            "home": "<team name>",
+            "away": "<team name>",
             "date": "<ISO datetime>",
             "status": "pending",
             "bookmakers": {
               "<BookmakerName>": [
-                {"name": "ML", "odds": [{"home": <decimal>, "away": <decimal>}]} 
+                {"name": "ML", "odds": [{"home": <decimal>, "away": <decimal>}]}  
               ]
             }
           }
         """
         if self._client is None:
-            raise RuntimeError("Client not initialized — use async context manager")
+            raise RuntimeError("Client not initialized - use async context manager")
 
         api_key = settings.ODDSPAPI_SECRET_KEY
         tournament_ids_str = ",".join(str(t) for t in LOL_MAJOR_TOURNAMENT_IDS)
 
-        # Step 1: fetch participant id→name mapping (best-effort)
+        # Step 1: fetch participant id->name mapping (best-effort)
         participant_names = await self._fetch_participant_names(api_key)
 
         # Step 2: fetch fixtures + odds
@@ -154,8 +161,7 @@ class OddsPapiClient:
                 or str(p2_id or "")
             )
 
-            # Parse bookmaker odds — LoL uses dynamic market IDs, find moneyline by checking
-            # outcome bookmakerOutcomeId values ("home"/"away")
+            # Parse bookmaker odds - scan all markets, find moneyline by bookmakerOutcomeId "home"/"away"
             bookmakers_raw = fixture.get("bookmakerOdds") or {}
             if not isinstance(bookmakers_raw, dict):
                 continue
@@ -175,15 +181,13 @@ class OddsPapiClient:
                 home_price: float | None = None
                 away_price: float | None = None
 
-                # Scan all markets to find the one with home/away moneyline outcomes
-                for market_id, market_data in markets.items():
+                for market_data in markets.values():
                     if not isinstance(market_data, dict):
                         continue
                     outcomes = market_data.get("outcomes") or {}
                     if not isinstance(outcomes, dict):
                         continue
 
-                    # Find home and away prices by bookmakerOutcomeId
                     for outcome_data in outcomes.values():
                         if not isinstance(outcome_data, dict):
                             continue
@@ -204,7 +208,6 @@ class OddsPapiClient:
                         elif outcome_side == "away":
                             away_price = price_f
 
-                    # If we found both, stop scanning markets
                     if home_price is not None and away_price is not None:
                         break
 
