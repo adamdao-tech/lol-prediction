@@ -71,8 +71,8 @@ class MatchListItem(BaseModel):
 class MatchOut(MatchListItem):
     patch_version: str | None = None
     winner_id: int | None = None
-    created_at: datetime
-    updated_at: datetime
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 class MatchDetail(MatchOut):

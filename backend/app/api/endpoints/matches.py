@@ -140,7 +140,7 @@ async def get_match(match_id: int, db: Annotated[AsyncSession, Depends(get_db)])
     match = result.scalar_one_or_none()
     if match is None:
         raise HTTPException(status_code=404, detail="Match not found")
-    return match
+    return _build_match_list_item(match)
 
 
 def _build_match_list_item(m: Match) -> dict:
