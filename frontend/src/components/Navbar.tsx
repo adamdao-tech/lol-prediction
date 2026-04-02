@@ -1,4 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import ThemeToggle from './ThemeToggle'
 
 export default function Navbar() {
   const location = useLocation()
@@ -36,12 +37,15 @@ export default function Navbar() {
             </Link>
           ))}
         </div>
-        <button
-          onClick={handleLogout}
-          className="ml-auto text-sm font-medium text-gray-300 hover:text-white hover:bg-gray-700 px-3 py-1 rounded transition-colors"
-        >
-          Odhlásit
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          <ThemeToggle />
+          <button
+            onClick={handleLogout}
+            className="text-sm font-medium text-gray-300 hover:text-white hover:bg-gray-700 px-3 py-1 rounded transition-colors"
+          >
+            Odhlásit
+          </button>
+        </div>
       </div>
     </nav>
   )

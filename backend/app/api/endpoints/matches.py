@@ -171,8 +171,8 @@ def _build_match_list_item(m: Match) -> dict:
             "league": league_data,
         }
 
-    # Determine live_game_id: prefer lol_esports_game_id for livestats API,
-    # fall back to pandascore_id only if lol_esports_game_id is missing
+    # Determine live_game_id: only use lol_esports_game_id (required by the
+    # livestats API at feed.lolesports.com); never fall back to pandascore_id.
     live_game_id: str | None = None
     games: list = m.__dict__.get("games", [])
     if games and m.status == MatchStatus.running:
@@ -184,11 +184,11 @@ def _build_match_list_item(m: Match) -> dict:
             live_game_id = running_game.lol_esports_game_id
         else:
             first_game = next(
-                (g for g in games if g.lol_esports_game_id or g.pandascore_id),
+                (g for g in games if g.lol_esports_game_id),
                 None,
             )
             if first_game:
-                live_game_id = first_game.lol_esports_game_id or first_game.pandascore_id
+                live_game_id = first_game.lol_esports_game_id
 
     return {
         "id": m.id,
