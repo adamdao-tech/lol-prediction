@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 
-from app.ingestion.lol_esports_client import LoLEsportsClient
+from app.ingestion.lol_esports_client import LoLEsportsClient, LiveDataNotAvailable
 from app.prediction.live_engine import compute_live_win_prob
 from app.schemas.live import LivePredictionOut, LiveSignals, LiveWindowOut
 
@@ -12,8 +12,13 @@ _MAX_PROB_HISTORY = 20
 @router.get("/{game_id}", response_model=LiveWindowOut)
 async def get_live_prediction(game_id: str):
     client = LoLEsportsClient()
-    async with client:
-        window_data = await client.get_live_window(game_id)
+    try:
+        async with client:
+            window_data = await client.get_live_window(game_id)
+    except LiveDataNotAvailable as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Upstream livestats unavailable: {exc}")
 
     frames = window_data.get("frames", [])
     if not frames:

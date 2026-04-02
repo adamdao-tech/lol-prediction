@@ -12,6 +12,11 @@ LOL_ESPORTS_BASE = "https://esports-api.lolesports.com/persisted/gw"
 LIVESTATS_BASE = "https://feed.lolesports.com/livestats/v1"
 
 
+class LiveDataNotAvailable(Exception):
+    """Raised when the LoL Esports livestats API returns no usable data (404/400)."""
+    pass
+
+
 class LoLEsportsClient:
     def __init__(self) -> None:
         self._client: httpx.AsyncClient | None = None
@@ -35,16 +40,26 @@ class LoLEsportsClient:
         assert self._client is not None, "Client not initialised — use async with"
         url = f"{LIVESTATS_BASE}/window/{game_id}"
         params = {"startingTime": self._starting_time()}
-        response = await self._client.get(url, params=params)
-        response.raise_for_status()
+        try:
+            response = await self._client.get(url, params=params)
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            raise LiveDataNotAvailable(
+                f"No live data for game_id={game_id} (HTTP {exc.response.status_code})"
+            ) from exc
         return response.json()
 
     async def get_live_details(self, game_id: str) -> dict:
         assert self._client is not None, "Client not initialised — use async with"
         url = f"{LIVESTATS_BASE}/details/{game_id}"
         params = {"startingTime": self._starting_time()}
-        response = await self._client.get(url, params=params)
-        response.raise_for_status()
+        try:
+            response = await self._client.get(url, params=params)
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            raise LiveDataNotAvailable(
+                f"No live details for game_id={game_id} (HTTP {exc.response.status_code})"
+            ) from exc
         return response.json()
 
     async def get_schedule(self, league_id: str | None = None) -> dict:
