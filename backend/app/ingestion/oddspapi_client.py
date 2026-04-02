@@ -10,6 +10,10 @@ BASE_URL = "https://api.oddspapi.io"
 # LoL esports sportId in OddsPapi v4
 LOL_SPORT_ID = 18
 
+# Only fetch major LoL leagues — stays within the 5 tournament ID limit
+# LCS=2450, LEC=2452, LCK=2454, LPL (if available), MSI=2527
+LOL_MAJOR_TOURNAMENT_IDS = [2450, 2452, 2454, 2527, 2549]
+
 # Market IDs in OddsPapi v4
 _MARKET_MONEYLINE = "101"
 _OUTCOME_HOME = "101"
@@ -22,9 +26,10 @@ class OddsPapiClient:
     Docs: https://api.oddspapi.io
     Auth: apiKey as query parameter on every request
     Flow:
-      1. GET /v4/tournaments?sportId=18&apiKey=...  — get all LoL tournament IDs
-      2. GET /v4/participants?sportId=18&apiKey=...  — build participantId→name mapping
-      3. GET /v4/odds-by-tournaments?tournamentIds=...&apiKey=...  — get fixtures+odds
+      1. GET /v4/odds-by-tournaments?tournamentIds=2450,2452,2454,2527,2549&apiKey=...
+         — get fixtures+odds for major LoL tournaments (max 5 IDs)
+      Note: participant names are resolved from fixture data directly (participant1Name/participant2Name)
+            or fetched separately if needed.
     """
 
     def __init__(self) -> None:
@@ -43,9 +48,9 @@ class OddsPapiClient:
 
     async def get_lol_odds(self) -> list[dict]:
         """
-        Fetches H2H (ML) odds for upcoming LoL esports matches.
+        Fetches H2H (ML) odds for upcoming LoL esports matches from major leagues.
 
-        Returns a list of event dicts with the following structure:
+        Returns a list of event dicts compatible with sync_odds.py:
           {
             "id": "<fixtureId>",
             "home": "<team name>",
@@ -66,103 +71,62 @@ class OddsPapiClient:
             raise RuntimeError("Client not initialized — use async context manager")
 
         api_key = settings.ODDSPAPI_SECRET_KEY
+        tournament_ids_str = ",".join(str(t) for t in LOL_MAJOR_TOURNAMENT_IDS)
 
-        # Step 1: get all LoL tournaments to obtain tournament IDs
-        try:
-            resp = await self._client.get(
-                "/v4/tournaments",
-                params={"sportId": LOL_SPORT_ID, "apiKey": api_key},
-            )
-            resp.raise_for_status()
-            tournaments: list[dict] = resp.json()
-        except httpx.HTTPStatusError as exc:
-            logger.warning(
-                "oddspapi: failed to fetch tournaments",
-                status_code=exc.response.status_code,
-                detail=exc.response.text[:200],
-            )
-            return []
-        except Exception as exc:
-            logger.warning("oddspapi: error fetching tournaments", error=str(exc))
-            return []
-
-        if not tournaments:
-            logger.info("oddspapi: no LoL tournaments found")
-            return []
-
-        tournament_ids = [
-            str(t["tournamentId"])
-            for t in tournaments
-            if isinstance(t.get("tournamentId"), int)
-        ]
-        if not tournament_ids:
-            return []
-
-        # Step 2: fetch participant id→name mapping
-        participant_names: dict[int, str] = {}
-        try:
-            parts_resp = await self._client.get(
-                "/v4/participants",
-                params={"sportId": LOL_SPORT_ID, "apiKey": api_key},
-            )
-            parts_resp.raise_for_status()
-            participants: list[dict] = parts_resp.json()
-            for p in participants:
-                pid = p.get("participantId")
-                pname = p.get("participantName") or p.get("name", "")
-                if isinstance(pid, int) and pname:
-                    participant_names[pid] = pname
-        except httpx.HTTPStatusError as exc:
-            logger.warning(
-                "oddspapi: failed to fetch participants",
-                status_code=exc.response.status_code,
-                detail=exc.response.text[:200],
-            )
-            # Continue without names — IDs will be used as fallback
-        except Exception as exc:
-            logger.warning("oddspapi: error fetching participants", error=str(exc))
-
-        # Step 3: get fixtures+odds for all tournaments
+        # Fetch fixtures + odds for major LoL tournaments (max 5 IDs per API limit)
         try:
             odds_resp = await self._client.get(
                 "/v4/odds-by-tournaments",
                 params={
-                    "tournamentIds": ",".join(tournament_ids),
+                    "tournamentIds": tournament_ids_str,
                     "bookmaker": "pinnacle",
                     "apiKey": api_key,
                 },
             )
             odds_resp.raise_for_status()
-            fixtures: list[dict] = odds_resp.json()
+            fixtures: list = odds_resp.json()
         except httpx.HTTPStatusError as exc:
             logger.warning(
                 "oddspapi: failed to fetch odds-by-tournaments",
                 status_code=exc.response.status_code,
-                detail=exc.response.text[:200],
+                detail=exc.response.text[:300],
             )
             return []
         except Exception as exc:
             logger.warning("oddspapi: error fetching odds-by-tournaments", error=str(exc))
             return []
 
-        if not fixtures:
+        if not fixtures or not isinstance(fixtures, list):
             return []
 
         result: list[dict] = []
         for fixture in fixtures:
+            if not isinstance(fixture, dict):
+                continue
+
             fixture_id = fixture.get("fixtureId")
-            p1_id = fixture.get("participant1Id")
-            p2_id = fixture.get("participant2Id")
             start_time = fixture.get("startTime")
 
             if not fixture_id or not start_time:
                 continue
 
-            home_name = participant_names.get(p1_id, str(p1_id)) if p1_id is not None else ""
-            away_name = participant_names.get(p2_id, str(p2_id)) if p2_id is not None else ""
+            # Try to get team names directly from fixture (some API versions include them)
+            home_name = (
+                fixture.get("participant1Name")
+                or fixture.get("home")
+                or str(fixture.get("participant1Id", ""))
+            )
+            away_name = (
+                fixture.get("participant2Name")
+                or fixture.get("away")
+                or str(fixture.get("participant2Id", ""))
+            )
 
             # Parse bookmaker odds from v4 structure
-            bookmakers_raw: dict = fixture.get("bookmakerOdds") or {}
+            bookmakers_raw = fixture.get("bookmakerOdds") or {}
+            if not isinstance(bookmakers_raw, dict):
+                continue
+
             bookmakers_out: dict[str, list[dict]] = {}
 
             for bk_name, bk_data in bookmakers_raw.items():
@@ -171,12 +135,18 @@ class OddsPapiClient:
                 if not bk_data.get("bookmakerIsActive", True):
                     continue
 
-                markets: dict = bk_data.get("markets") or {}
-                moneyline = markets.get(_MARKET_MONEYLINE)
-                if not moneyline:
+                markets = bk_data.get("markets") or {}
+                if not isinstance(markets, dict):
                     continue
 
-                outcomes: dict = moneyline.get("outcomes") or {}
+                moneyline = markets.get(_MARKET_MONEYLINE)
+                if not moneyline or not isinstance(moneyline, dict):
+                    continue
+
+                outcomes = moneyline.get("outcomes") or {}
+                if not isinstance(outcomes, dict):
+                    continue
+
                 home_outcome = outcomes.get(_OUTCOME_HOME)
                 away_outcome = outcomes.get(_OUTCOME_AWAY)
 
@@ -184,12 +154,8 @@ class OddsPapiClient:
                     continue
 
                 try:
-                    home_price = float(
-                        home_outcome["players"]["0"]["price"]
-                    )
-                    away_price = float(
-                        away_outcome["players"]["0"]["price"]
-                    )
+                    home_price = float(home_outcome["players"]["0"]["price"])
+                    away_price = float(away_outcome["players"]["0"]["price"])
                 except (KeyError, TypeError, ValueError):
                     continue
 
