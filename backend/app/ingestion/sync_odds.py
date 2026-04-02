@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.config import settings
-from app.ingestion.odds_api_client import OddsApiClient
+from app.ingestion.oddspapi_client import OddsPapiClient
 from app.models import Match
 from app.models.match import MatchStatus
 from app.models.odds_snapshot import OddsSnapshot, OddsSource
@@ -29,14 +29,14 @@ def _teams_match(api_name: str, db_name: str) -> bool:
 
 async def sync_lol_odds(db: AsyncSession) -> dict:
     """
-    Fetches LoL odds from The Odds API and saves OddsSnapshots.
+    Fetches LoL odds from OddsPapi.io and saves OddsSnapshots.
     Skips gracefully if API key not set.
     """
-    if not settings.THE_ODDS_API_KEY:
-        logger.info("sync_lol_odds: THE_ODDS_API_KEY not set, skipping")
-        return {"skipped": True, "reason": "THE_ODDS_API_KEY not set"}
+    if not settings.ODDSPAPI_SECRET_KEY:
+        logger.info("sync_lol_odds: ODDSPAPI_SECRET_KEY not set, skipping")
+        return {"skipped": True, "reason": "ODDSPAPI_SECRET_KEY not set"}
 
-    async with OddsApiClient() as client:
+    async with OddsPapiClient() as client:
         events = await client.get_lol_odds()
 
     inserted = 0
@@ -44,9 +44,11 @@ async def sync_lol_odds(db: AsyncSession) -> dict:
     now = datetime.now(timezone.utc)
 
     for event in events:
-        home_team = event.get("home_team", "")
-        away_team = event.get("away_team", "")
-        commence_time_raw = event.get("commence_time")
+        # OddsPapi uses "home"/"away" instead of "home_team"/"away_team"
+        home_team = event.get("home", "")
+        away_team = event.get("away", "")
+        # OddsPapi uses "date" instead of "commence_time"
+        commence_time_raw = event.get("date")
 
         if not home_team or not away_team or not commence_time_raw:
             skipped += 1
@@ -95,32 +97,81 @@ async def sync_lol_odds(db: AsyncSession) -> dict:
             skipped += 1
             continue
 
-        for bookmaker in event.get("bookmakers", []):
-            bookmaker_name = bookmaker.get("key", bookmaker.get("title", "unknown"))
-            for market in bookmaker.get("markets", []):
-                if market.get("key") != "h2h":
-                    continue
-                outcomes = market.get("outcomes", [])
-                if len(outcomes) < 2:
+        # OddsPapi bookmakers is a dict: {bookmaker_name: [markets]}
+        bookmakers_data = event.get("bookmakers", {})
+        if isinstance(bookmakers_data, list):
+            # Fallback: handle list format just in case
+            logger.warning(
+                "sync_lol_odds: unexpected list format for bookmakers, expected dict",
+                event_id=event.get("id"),
+            )
+            bookmaker_items = [
+                (bk.get("key", bk.get("title", "unknown")), bk.get("markets", []))
+                for bk in bookmakers_data
+            ]
+        else:
+            # Normal OddsPapi dict format: {bookmaker_name: [markets]}
+            bookmaker_items = [
+                (name, markets) for name, markets in bookmakers_data.items()
+            ]
+
+        for bookmaker_name, markets in bookmaker_items:
+            for market in markets:
+                # OddsPapi uses "ML" (Match Line) for H2H market
+                market_name = market.get("name", market.get("key", ""))
+                if market_name not in ("ML", "h2h"):
                     continue
 
-                # Map outcomes to team1/team2 order matching the DB match
-                team1_odds: float | None = None
-                team2_odds: float | None = None
-                for outcome in outcomes:
-                    oname = outcome.get("name", "")
-                    oprice = float(outcome.get("price", 0))
+                # OddsPapi odds format: [{"home": "1.85", "away": "2.10"}]
+                # Fallback to "outcomes" list for compatibility
+                odds_list = market.get("odds", [])
+                outcomes = market.get("outcomes", [])
+
+                team1_odds: float = 0.0
+                team2_odds: float = 0.0
+
+                if odds_list:
+                    # OddsPapi native format
+                    first_odds = odds_list[0] if odds_list else {}
+                    raw_home = first_odds.get("home", 0)
+                    raw_away = first_odds.get("away", 0)
+                    try:
+                        home_odds_val = float(raw_home)
+                        away_odds_val = float(raw_away)
+                    except (ValueError, TypeError):
+                        continue
+
+                    t1_name = match.team1.name if match.team1 else ""
+                    # Determine which side (home/away in API) maps to team1/team2 in DB
+                    if _teams_match(home_team, t1_name):
+                        team1_odds = home_odds_val
+                        team2_odds = away_odds_val
+                    else:
+                        team1_odds = away_odds_val
+                        team2_odds = home_odds_val
+
+                elif len(outcomes) >= 2:
+                    # Compatibility with The Odds API-style outcomes list
+                    team1_odds_opt: float | None = None
+                    team2_odds_opt: float | None = None
                     t1_name = match.team1.name if match.team1 else ""
                     t2_name = match.team2.name if match.team2 else ""
-                    if _teams_match(oname, t1_name):
-                        team1_odds = oprice
-                    elif _teams_match(oname, t2_name):
-                        team2_odds = oprice
+                    for outcome in outcomes:
+                        oname = outcome.get("name", "")
+                        oprice = float(outcome.get("price", 0))
+                        if _teams_match(oname, t1_name):
+                            team1_odds_opt = oprice
+                        elif _teams_match(oname, t2_name):
+                            team2_odds_opt = oprice
 
-                if team1_odds is None or team2_odds is None:
-                    # Fall back to positional assignment
-                    team1_odds = float(outcomes[0].get("price", 0))
-                    team2_odds = float(outcomes[1].get("price", 0))
+                    if team1_odds_opt is None or team2_odds_opt is None:
+                        team1_odds_opt = float(outcomes[0].get("price", 0))
+                        team2_odds_opt = float(outcomes[1].get("price", 0))
+
+                    team1_odds = team1_odds_opt
+                    team2_odds = team2_odds_opt
+                else:
+                    continue
 
                 if team1_odds <= 0 or team2_odds <= 0:
                     continue
