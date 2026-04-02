@@ -36,11 +36,16 @@ async def admin_health(db: Annotated[AsyncSession, Depends(get_db)]):
     if not settings.PANDASCORE_API_KEY or settings.PANDASCORE_API_KEY == "your_pandascore_api_key_here":
         pandascore_status = "no_api_key"
 
+    oddspapi_status = "ok"
+    if not settings.ODDSPAPI_SECRET_KEY:
+        oddspapi_status = "no_api_key"
+
     return {
         "status": "ok",
         "db": db_status,
         "redis": redis_status,
         "pandascore": pandascore_status,
+        "oddspapi": oddspapi_status,
         "version": "0.1.0",
     }
 
