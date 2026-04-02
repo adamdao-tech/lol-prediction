@@ -6,7 +6,7 @@ from sqlalchemy import select, text
 
 from app.database import get_db, engine
 from app.models.ingestion_log import IngestionLog
-from app.ingestion.sync_matches import sync_upcoming_matches
+from app.ingestion.sync_matches import sync_upcoming_matches, sync_lol_esports_game_ids
 from app.ingestion.sync_leagues import sync_leagues
 from app.ingestion.sync_teams import sync_teams
 from app.config import settings
@@ -86,4 +86,10 @@ async def trigger_sync_leagues(db: Annotated[AsyncSession, Depends(get_db)]):
 async def trigger_sync_teams(db: Annotated[AsyncSession, Depends(get_db)]):
     result = await sync_teams(db)
     await db.flush()
+    return result
+
+
+@router.post("/sync/lol-game-ids")
+async def trigger_sync_lol_game_ids(db: Annotated[AsyncSession, Depends(get_db)]):
+    result = await sync_lol_esports_game_ids(db)
     return result

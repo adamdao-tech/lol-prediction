@@ -1,11 +1,13 @@
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from app.models import Match, Team, Tournament, League
 from app.models.game import Game, GameStatus
 from app.models.match import MatchStatus
 from app.models.ingestion_log import IngestionLog, IngestionStatus
 from app.ingestion.pandascore_client import PandaScoreClient
+from app.ingestion.lol_esports_client import LoLEsportsClient
 from app.utils.logging import get_logger
 import time
 
@@ -48,9 +50,6 @@ async def _ensure_game(db: AsyncSession, match_id: int, game_data: dict) -> None
     game_number = game_data.get("position") or game_data.get("game_number") or 1
     game_status = _map_game_status(game_data.get("status", "not_started"))
 
-    # PandaScore doesn't expose LoL Esports game ID directly; use PandaScore game ID as best-effort
-    lol_esports_game_id: str | None = ps_game_id
-
     if ps_game_id:
         result = await db.execute(select(Game).where(Game.pandascore_id == ps_game_id))
         game = result.scalar_one_or_none()
@@ -63,7 +62,7 @@ async def _ensure_game(db: AsyncSession, match_id: int, game_data: dict) -> None
     if game is None:
         game = Game(
             pandascore_id=ps_game_id,
-            lol_esports_game_id=lol_esports_game_id,
+            lol_esports_game_id=None,
             match_id=match_id,
             game_number=game_number,
             status=game_status,
@@ -71,8 +70,6 @@ async def _ensure_game(db: AsyncSession, match_id: int, game_data: dict) -> None
         db.add(game)
     else:
         game.status = game_status
-        if lol_esports_game_id and not game.lol_esports_game_id:
-            game.lol_esports_game_id = lol_esports_game_id
 
 
 async def _ensure_team(db: AsyncSession, data: dict | None) -> int | None:
@@ -315,3 +312,100 @@ async def sync_running_matches(db: AsyncSession) -> dict:
     await db.flush()
 
     return {"fetched": fetched, "inserted": inserted, "updated": updated}
+
+
+async def sync_lol_esports_game_ids(db: AsyncSession) -> dict:
+    """Fetch real LoL Esports game IDs from the LoL Esports schedule API and update Game records.
+
+    Matches our stored Match records against LoL Esports schedule events by team
+    codes/acronyms, then calls getEventDetails to get the authoritative game IDs
+    (18-digit strings required by the livestats API).
+    """
+    updated = 0
+    error_msg = None
+
+    try:
+        # Load scheduled and running matches together with their games and teams
+        result = await db.execute(
+            select(Match)
+            .where(Match.status.in_([MatchStatus.scheduled, MatchStatus.running]))
+            .options(
+                selectinload(Match.games),
+                selectinload(Match.team1),
+                selectinload(Match.team2),
+            )
+        )
+        matches = result.scalars().all()
+
+        if not matches:
+            return {"updated": 0}
+
+        # Build lookup: frozenset({team1_code, team2_code}) -> Match
+        # Use acronym first, fall back to name; normalise to lowercase
+        match_lookup: dict[frozenset, Match] = {}
+        for match in matches:
+            t1 = match.team1
+            t2 = match.team2
+            if not t1 or not t2:
+                continue
+            code1 = (t1.acronym or t1.name or "").lower().strip()
+            code2 = (t2.acronym or t2.name or "").lower().strip()
+            if code1 and code2:
+                match_lookup[frozenset([code1, code2])] = match
+
+        async with LoLEsportsClient() as lol_client:
+            schedule = await lol_client.get_schedule()
+            events = schedule.get("data", {}).get("schedule", {}).get("events", [])
+
+            for event in events:
+                match_data = event.get("match") or {}
+                lol_match_id = match_data.get("id")
+                if not lol_match_id:
+                    continue
+
+                teams = match_data.get("teams") or []
+                if len(teams) < 2:
+                    continue
+
+                code1 = (teams[0].get("code") or teams[0].get("name") or "").lower().strip()
+                code2 = (teams[1].get("code") or teams[1].get("name") or "").lower().strip()
+                if not code1 or not code2:
+                    continue
+
+                our_match = match_lookup.get(frozenset([code1, code2]))
+                if our_match is None:
+                    continue
+
+                try:
+                    details = await lol_client.get_event_details(str(lol_match_id))
+                    event_match = details.get("data", {}).get("event", {}).get("match", {})
+                    lol_games = event_match.get("games") or []
+
+                    # Build game_number -> lol_game_id mapping from the response
+                    lol_id_by_number: dict[int, str] = {}
+                    for g in lol_games:
+                        g_id = g.get("id")
+                        g_num = g.get("number")
+                        if g_id and g_num is not None:
+                            lol_id_by_number[int(g_num)] = str(g_id)
+
+                    for game in our_match.games:
+                        real_id = lol_id_by_number.get(game.game_number)
+                        if real_id and game.lol_esports_game_id != real_id:
+                            game.lol_esports_game_id = real_id
+                            updated += 1
+
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to fetch event details",
+                        lol_match_id=lol_match_id,
+                        error=str(exc),
+                    )
+
+        await db.flush()
+    except Exception as exc:
+        logger.error("sync_lol_esports_game_ids failed", error=str(exc))
+        return {"updated": updated, "error": "sync failed — see server logs"}
+
+    logger.info("sync_lol_esports_game_ids complete", updated=updated)
+    return {"updated": updated}

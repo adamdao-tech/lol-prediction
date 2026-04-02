@@ -147,6 +147,7 @@ export const adminApi = {
   syncMatches: () => apiClient.post('/api/admin/sync/matches'),
   syncLeagues: () => apiClient.post('/api/admin/sync/leagues'),
   syncTeams: () => apiClient.post('/api/admin/sync/teams'),
+  syncLolGameIds: () => apiClient.post('/api/admin/sync/lol-game-ids'),
 }
 
 export interface LiveSignals {
