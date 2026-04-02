@@ -47,6 +47,10 @@ class LoLEsportsClient:
             raise LiveDataNotAvailable(
                 f"No live data for game_id={game_id} (HTTP {exc.response.status_code})"
             ) from exc
+        if response.status_code == 204:
+            raise LiveDataNotAvailable(
+                f"No live data for game_id={game_id} (HTTP 204 No Content)"
+            )
         return response.json()
 
     async def get_live_details(self, game_id: str) -> dict:
@@ -60,6 +64,10 @@ class LoLEsportsClient:
             raise LiveDataNotAvailable(
                 f"No live details for game_id={game_id} (HTTP {exc.response.status_code})"
             ) from exc
+        if response.status_code == 204:
+            raise LiveDataNotAvailable(
+                f"No live details for game_id={game_id} (HTTP 204 No Content)"
+            )
         return response.json()
 
     async def get_schedule(self, league_id: str | None = None) -> dict:

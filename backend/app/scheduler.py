@@ -1,7 +1,7 @@
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from app.database import AsyncSessionLocal
-from app.ingestion.sync_matches import sync_upcoming_matches, sync_running_matches
+from app.ingestion.sync_matches import sync_upcoming_matches, sync_running_matches, sync_lol_esports_game_ids
 from app.ingestion.sync_leagues import sync_leagues
 from app.ingestion.sync_teams import sync_teams
 from app.ingestion.sync_odds import sync_lol_odds
@@ -71,6 +71,18 @@ async def _run_sync_odds() -> None:
             logger.error("scheduler: sync_lol_odds error", error=str(exc))
 
 
+async def _run_sync_lol_game_ids() -> None:
+    logger.info("scheduler: starting sync_lol_esports_game_ids")
+    async with AsyncSessionLocal() as db:
+        try:
+            result = await sync_lol_esports_game_ids(db)
+            await db.commit()
+            logger.info("scheduler: sync_lol_esports_game_ids done", **result)
+        except Exception as exc:
+            await db.rollback()
+            logger.error("scheduler: sync_lol_esports_game_ids error", error=str(exc))
+
+
 def start_scheduler() -> None:
     scheduler.add_job(
         _run_sync_matches,
@@ -100,6 +112,12 @@ def start_scheduler() -> None:
         _run_sync_odds,
         trigger=IntervalTrigger(minutes=60),
         id="sync_lol_odds",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        _run_sync_lol_game_ids,
+        trigger=IntervalTrigger(minutes=5),
+        id="sync_lol_game_ids",
         replace_existing=True,
     )
     scheduler.start()

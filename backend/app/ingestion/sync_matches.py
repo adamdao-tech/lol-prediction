@@ -241,10 +241,14 @@ async def sync_running_matches(db: AsyncSession) -> dict:
         fetched = len(matches_data)
         logger.info("Fetched running matches", count=fetched)
 
+        fetched_ps_ids: set[str] = set()
+
         for item in matches_data:
             ps_id = str(item.get("id", ""))
             if not ps_id:
                 continue
+
+            fetched_ps_ids.add(ps_id)
 
             opponents = item.get("opponents", [])
             team1_data = opponents[0].get("opponent") if len(opponents) > 0 else None
@@ -290,6 +294,19 @@ async def sync_running_matches(db: AsyncSession) -> dict:
 
             for game_data in item.get("games") or []:
                 await _ensure_game(db, match.id, game_data)
+
+        stale_result = await db.execute(
+            select(Match).where(
+                Match.status == MatchStatus.running,
+                Match.pandascore_id.notin_(fetched_ps_ids),
+            )
+        )
+        stale_matches = stale_result.scalars().all() if fetched_ps_ids else []
+        for stale in stale_matches:
+            stale.status = MatchStatus.finished
+            updated += 1
+        if stale_matches:
+            logger.info("Marked stale running matches as finished", count=len(stale_matches))
 
         await db.flush()
     except Exception as exc:
