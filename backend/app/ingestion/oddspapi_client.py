@@ -15,7 +15,7 @@ class OddsPapiClient:
     """
     Async klient pro OddsPapi.io.
     Docs: https://oddspapi.io/en/docs
-    Auth: Bearer token in Authorization header
+    Auth: apiKey header
     Flow:
       1. GET /en/events?sport_id=18  — get upcoming LoL events
       2. GET /en/odds?event_id={id}  — get bookmaker odds for each event
@@ -27,7 +27,7 @@ class OddsPapiClient:
     async def __aenter__(self) -> "OddsPapiClient":
         self._client = httpx.AsyncClient(
             base_url=BASE_URL,
-            headers={"Authorization": f"Bearer {settings.ODDSPAPI_SECRET_KEY}"},
+            headers={"apiKey": settings.ODDSPAPI_SECRET_KEY},
             timeout=15.0,
         )
         return self
