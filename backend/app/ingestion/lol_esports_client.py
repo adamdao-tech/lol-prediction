@@ -1,4 +1,3 @@
-from datetime import datetime, timezone, timedelta
 from typing import Any
 
 import httpx
@@ -32,14 +31,10 @@ class LoLEsportsClient:
         if self._client:
             await self._client.aclose()
 
-    def _starting_time(self) -> str:
-        dt = datetime.now(timezone.utc) - timedelta(seconds=30)
-        return dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")
-
     async def get_live_window(self, game_id: str) -> dict:
         assert self._client is not None, "Client not initialised — use async with"
         url = f"{LIVESTATS_BASE}/window/{game_id}"
-        params = {"startingTime": self._starting_time()}
+        params: dict = {}
         try:
             response = await self._client.get(url, params=params)
             response.raise_for_status()
@@ -56,7 +51,7 @@ class LoLEsportsClient:
     async def get_live_details(self, game_id: str) -> dict:
         assert self._client is not None, "Client not initialised — use async with"
         url = f"{LIVESTATS_BASE}/details/{game_id}"
-        params = {"startingTime": self._starting_time()}
+        params: dict = {}
         try:
             response = await self._client.get(url, params=params)
             response.raise_for_status()
