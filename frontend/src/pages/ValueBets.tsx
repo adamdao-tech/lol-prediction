@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api } from '../api/client'
+import apiClient from '../api/client'
 
 interface ValueBetDetail {
   implied_prob: number
@@ -76,7 +76,7 @@ export default function ValueBets() {
   useEffect(() => {
     setLoading(true)
     const edgeParam = showAll ? 0 : minEdge
-    api
+    apiClient
       .get<ValueBetItem[]>(`/value-bets?min_edge=${edgeParam}&limit=50`)
       .then((res) => {
         setItems(res.data)
