@@ -7,10 +7,23 @@ from app.schemas.live import LivePredictionOut, LiveSignals, LiveWindowOut
 router = APIRouter()
 
 _MAX_PROB_HISTORY = 20
+# LoL Esports internal game IDs are 18-digit strings; anything shorter is invalid
+# (e.g. PandaScore game IDs are typically 5-7 digits).
+_MIN_LOL_ESPORTS_GAME_ID_LENGTH = 15
 
 
 @router.get("/{game_id}", response_model=LiveWindowOut)
 async def get_live_prediction(game_id: str):
+    # LoL Esports livestats API requires an 18-digit internal game ID.
+    # Short numeric IDs (e.g. PandaScore game IDs) are not valid.
+    if game_id.isdigit() and len(game_id) < _MIN_LOL_ESPORTS_GAME_ID_LENGTH:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"game_id '{game_id}' looks like a PandaScore ID and is not valid for the "
+                "LoL Esports livestats API. Use the LoL Esports internal game ID instead."
+            ),
+        )
     client = LoLEsportsClient()
     try:
         async with client:
