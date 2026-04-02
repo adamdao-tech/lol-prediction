@@ -79,3 +79,11 @@ class LoLEsportsClient:
         response = await self._client.get(url, params=params)
         response.raise_for_status()
         return response.json()
+
+    async def get_games_for_event(self, event_id: str) -> list[dict]:
+        """Returns list of games with their LoL Esports game IDs for a given event/match ID."""
+        data = await self.get_event_details(event_id)
+        try:
+            return data["data"]["event"]["match"]["games"]
+        except (KeyError, TypeError):
+            return []
